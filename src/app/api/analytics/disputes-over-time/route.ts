@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/app/api/auth/[...nextauth]/route"
+import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { Prisma } from "@prisma/client"
 import { format, startOfDay, subDays, differenceInDays, addDays } from "date-fns"
