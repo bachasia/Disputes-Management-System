@@ -12,7 +12,17 @@ Hướng dẫn triển khai ứng dụng PayPal Disputes Management System trên
 
 ### 1. Tạo file `.env` cho Docker
 
-Tạo file `.env` trong thư mục root của project:
+Copy file `env.example` thành `.env`:
+
+```bash
+# Linux/Mac
+cp env.example .env
+
+# Windows PowerShell
+Copy-Item env.example .env
+```
+
+Hoặc tạo file `.env` trong thư mục root của project với nội dung:
 
 ```env
 # Database Configuration
