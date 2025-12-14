@@ -5,7 +5,7 @@ import { Suspense } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useForm } from "react-hook-form"
-import { Eye, EyeOff, Loader2, Shield, AlertCircle } from "lucide-react"
+import { Eye, EyeOff, Loader2, Shield, AlertCircle, Heart } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -144,20 +144,21 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 text-center">
-          <div className="flex justify-center mb-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-600 text-white">
-              <Shield className="h-6 w-6" />
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      <div className="flex-1 flex items-center justify-center px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="space-y-1 text-center">
+            <div className="flex justify-center mb-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-600 text-white">
+                <Shield className="h-6 w-6" />
+              </div>
             </div>
-          </div>
-          <CardTitle className="text-2xl font-bold">PayPal Disputes Dashboard</CardTitle>
-          <CardDescription>
-            Sign in to manage your PayPal disputes
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+            <CardTitle className="text-2xl font-bold">PayPal Disputes Dashboard</CardTitle>
+            <CardDescription>
+              Sign in to manage your PayPal disputes
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
           <form 
             onSubmit={handleSubmit(onSubmit)} 
             className="space-y-4"
@@ -261,6 +262,17 @@ function LoginForm() {
           </div>
         </CardContent>
       </Card>
+      </div>
+      
+      {/* Footer */}
+      <footer className="border-t bg-white px-4 py-5 lg:px-6">
+        <div className="flex items-center justify-center text-sm text-muted-foreground">
+          <span>
+            2025 © Dispute Management | Crafted with{" "}
+            <Heart className="inline h-4 w-4 text-red-500 fill-red-500" /> by DTC Team
+          </span>
+        </div>
+      </footer>
     </div>
   )
 }
