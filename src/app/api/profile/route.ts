@@ -4,6 +4,9 @@ import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { checkWritePermission } from "@/lib/auth/role-check"
 
+// Force dynamic rendering (uses headers() from NextAuth)
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/profile
  * Get current user profile

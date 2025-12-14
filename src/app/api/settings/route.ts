@@ -3,6 +3,9 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 
+// Force dynamic rendering (uses headers() from NextAuth)
+export const dynamic = 'force-dynamic'
+
 // GET /api/settings - Get all settings
 export async function GET(request: NextRequest) {
   try {

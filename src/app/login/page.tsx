@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { Suspense } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useForm } from "react-hook-form"
@@ -16,7 +17,7 @@ interface LoginFormData {
   password: string
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [showPassword, setShowPassword] = React.useState(false)
@@ -253,6 +254,35 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="space-y-1 text-center">
+            <div className="flex justify-center mb-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-600 text-white">
+                <Shield className="h-6 w-6" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl font-bold">PayPal Disputes Dashboard</CardTitle>
+            <CardDescription>
+              Sign in to manage your PayPal disputes
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   )
 }
 

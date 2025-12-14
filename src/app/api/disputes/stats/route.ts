@@ -3,6 +3,9 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 
+// Force dynamic rendering (uses headers() from NextAuth)
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/disputes/stats
  * Get dispute statistics with filters

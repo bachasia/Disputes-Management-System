@@ -5,6 +5,9 @@ import { prisma } from "@/lib/db/prisma"
 import { Prisma } from "@prisma/client"
 import { format, startOfDay, subDays, differenceInDays, addDays } from "date-fns"
 
+// Force dynamic rendering (uses headers() from NextAuth)
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/analytics/disputes-over-time
  * Get disputes count over time (daily)
