@@ -15,8 +15,14 @@ echo "Database is ready!"
 
 # Run migrations using Prisma CLI
 echo "Running migrations..."
-# Use npx to run Prisma CLI (works with global install or local)
-npx prisma@5.19.0 migrate deploy
+# Check if migrations directory exists
+if [ -d "./prisma/migrations" ] && [ "$(ls -A ./prisma/migrations 2>/dev/null)" ]; then
+  echo "Migrations directory found, running migrate deploy..."
+  npx prisma@5.19.0 migrate deploy
+else
+  echo "No migrations found, using db push to sync schema..."
+  npx prisma@5.19.0 db push --accept-data-loss
+fi
 
 # Start the application
 echo "Starting Next.js..."
