@@ -18,10 +18,10 @@ echo "Running migrations..."
 # Check if migrations directory exists
 if [ -d "./prisma/migrations" ] && [ "$(ls -A ./prisma/migrations 2>/dev/null)" ]; then
   echo "Migrations directory found, running migrate deploy..."
-  npx prisma@5.19.0 migrate deploy
+  npx prisma@5.19.0 migrate deploy --skip-generate
 else
   echo "No migrations found, using db push to sync schema..."
-  npx prisma@5.19.0 db push --accept-data-loss
+  npx prisma@5.19.0 db push --accept-data-loss --skip-generate
 fi
 
 # Start the application
