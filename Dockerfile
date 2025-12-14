@@ -49,6 +49,8 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 # Copy Prisma CLI binary
 COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
+# Copy bcryptjs for seed script
+COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/package-lock.json ./package-lock.json
 
