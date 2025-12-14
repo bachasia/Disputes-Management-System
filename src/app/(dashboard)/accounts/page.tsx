@@ -213,9 +213,12 @@ export default function AccountsPage() {
     setFormModalOpen(true)
   }
 
-  const handleOpenDelete = (account: Account) => {
-    setSelectedAccount(account)
-    setDeleteDialogOpen(true)
+  const handleOpenDelete = (accountId: string) => {
+    const account = accounts.find((a) => a.id === accountId)
+    if (account) {
+      setSelectedAccount(account)
+      setDeleteDialogOpen(true)
+    }
   }
 
   const handleFormSubmit = async (formData: any) => {
