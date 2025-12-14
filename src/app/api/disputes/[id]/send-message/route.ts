@@ -73,7 +73,7 @@ export async function POST(
           messageType: latestMessage.posted_by || "SELLER",
           postedBy: latestMessage.posted_by || null,
           content: latestMessage.content || null,
-          attachments: latestMessage.attachments || null,
+          attachments: latestMessage.attachments || undefined,
           createdAt: new Date(latestMessage.time_posted),
         },
       })
