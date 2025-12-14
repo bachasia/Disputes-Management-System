@@ -54,6 +54,7 @@ export async function GET(request: NextRequest) {
         disputeCurrency: true,
         disputeCreateTime: true,
         resolvedAt: true,
+        rawData: true, // Include rawData to extract actual outcome if needed
       },
     })
 
@@ -68,28 +69,154 @@ export async function GET(request: NextRequest) {
           d.disputeStatus.toUpperCase().includes("REVIEW"))
     ).length
 
-    const resolved = disputes.filter(
-      (d) =>
-        d.disputeStatus &&
-        (d.disputeStatus.toUpperCase() === "RESOLVED" ||
-          d.disputeStatus.toUpperCase() === "CLOSED")
-    )
+    // Consider disputes resolved if:
+    // 1. Status is RESOLVED or CLOSED, OR
+    // 2. resolvedAt field is set (even if status is not explicitly RESOLVED)
+    const resolved = disputes.filter((d) => {
+      const status = d.disputeStatus?.toUpperCase() || ""
+      const isStatusResolved = status === "RESOLVED" || status === "CLOSED"
+      const hasResolvedAt = !!d.resolvedAt
+      return isStatusResolved || hasResolvedAt
+    })
 
     const resolvedCount = resolved.length
 
+    // Debug: Log resolved disputes and their outcomes
+    if (resolvedCount > 0) {
+      console.log(`[Analytics] Found ${resolvedCount} resolved disputes:`)
+      resolved.forEach((d, idx) => {
+        const rawDataStr = d.rawData ? JSON.stringify(d.rawData).substring(0, 200) : "null"
+        console.log(
+          `[Analytics] Resolved ${idx + 1}: status="${d.disputeStatus || "null"}", outcome="${d.disputeOutcome || "null"}", resolvedAt="${d.resolvedAt || "null"}", rawData preview="${rawDataStr}..."`
+        )
+        
+        // Log rawData outcome if exists
+        if (d.rawData && typeof d.rawData === 'object') {
+          const raw = d.rawData as any
+          console.log(`[Analytics]   RawData fields: outcome="${raw.outcome || 'null'}", dispute_outcome="${raw.dispute_outcome || 'null'}", status="${raw.status || 'null'}", dispute_state="${raw.dispute_state || 'null'}"`)
+        }
+      })
+    }
+
+    // Helper function to extract actual outcome from dispute
+    const getActualOutcome = (dispute: any): string | null => {
+      // If outcome exists and is not just "RESOLVED" or "CLOSED", use it
+      if (dispute.disputeOutcome && 
+          dispute.disputeOutcome.trim() !== "" &&
+          dispute.disputeOutcome.toUpperCase() !== "RESOLVED" &&
+          dispute.disputeOutcome.toUpperCase() !== "CLOSED") {
+        console.log(`[Analytics] Using stored outcome: "${dispute.disputeOutcome}"`)
+        return dispute.disputeOutcome
+      }
+      
+      // Try to extract from rawData if available
+      if (dispute.rawData && typeof dispute.rawData === 'object') {
+        const raw = dispute.rawData as any
+        
+        // Check for outcome field in rawData (most common)
+        if (raw.outcome && 
+            typeof raw.outcome === 'string' &&
+            raw.outcome.trim() !== "" &&
+            raw.outcome.toUpperCase() !== "RESOLVED" &&
+            raw.outcome.toUpperCase() !== "CLOSED") {
+          console.log(`[Analytics] Found outcome in rawData.outcome: "${raw.outcome}"`)
+          return raw.outcome
+        }
+        
+        // Check for dispute_outcome field (alternative format)
+        if (raw.dispute_outcome && 
+            typeof raw.dispute_outcome === 'string' &&
+            raw.dispute_outcome.trim() !== "" &&
+            raw.dispute_outcome.toUpperCase() !== "RESOLVED" &&
+            raw.dispute_outcome.toUpperCase() !== "CLOSED") {
+          console.log(`[Analytics] Found outcome in rawData.dispute_outcome: "${raw.dispute_outcome}"`)
+          return raw.dispute_outcome
+        }
+        
+        // Check for other possible outcome indicators
+        // Some PayPal API responses might have outcome in different locations
+        if (raw.adjudications && Array.isArray(raw.adjudications) && raw.adjudications.length > 0) {
+          const lastAdjudication = raw.adjudications[raw.adjudications.length - 1]
+          if (lastAdjudication.type && lastAdjudication.type.toUpperCase() !== "RESOLVED") {
+            console.log(`[Analytics] Found outcome in rawData.adjudications: "${lastAdjudication.type}"`)
+            return lastAdjudication.type
+          }
+        }
+        
+        console.log(`[Analytics] No valid outcome found in rawData. Available fields: ${Object.keys(raw).join(", ")}`)
+      }
+      
+      return null
+    }
+
     // Calculate won disputes - only count resolved disputes with seller-favorable outcome
     const won = resolved.filter((d) => {
-      if (!d.disputeOutcome) return false
-      const outcome = d.disputeOutcome.toUpperCase()
-      // Check for seller win indicators
-      return (
+      // Get actual outcome (from disputeOutcome or rawData)
+      const actualOutcome = getActualOutcome(d)
+      
+      if (!actualOutcome || actualOutcome.trim() === "") {
+        console.log(
+          `[Analytics] Dispute with status "${d.disputeStatus}" has no valid outcome (stored: "${d.disputeOutcome || 'null'}"). Cannot determine win/loss.`
+        )
+        return false
+      }
+      
+      const outcome = actualOutcome.toUpperCase().trim()
+      
+      // Check for buyer win indicators first (if buyer won, seller lost)
+      const isBuyerWin = (
+        outcome.includes("PAYOUT_TO_BUYER") ||
+        outcome.includes("BUYER_WIN") ||
+        outcome.includes("RESOLVED_BUYER_FAVOR") ||
+        outcome.includes("RESOLVED_IN_BUYER_FAVOR") ||
+        outcome.includes("BUYER_FAVOR") ||
+        outcome.includes("FAVOR_BUYER") ||
+        outcome === "REFUNDED" ||
+        outcome === "REFUND" ||
+        (outcome.includes("BUYER") && 
+         (outcome.includes("WON") || 
+          outcome.includes("FAVOR") ||
+          outcome.includes("FAVOUR")))
+      )
+      
+      if (isBuyerWin) {
+        console.log(`[Analytics] ✗ Dispute with outcome "${actualOutcome}" is BUYER WIN (seller lost)`)
+        return false
+      }
+      
+      // Check for seller win indicators - expanded list
+      const isWon = (
         outcome.includes("SELLER") ||
         outcome === "WON" ||
         outcome === "RESOLVED_SELLER_FAVOR" ||
         outcome === "SELLER_WIN" ||
-        outcome === "RESOLVED_IN_SELLER_FAVOR"
+        outcome === "RESOLVED_IN_SELLER_FAVOR" ||
+        outcome.includes("SELLER_FAVOR") ||
+        outcome.includes("FAVOR_SELLER") ||
+        outcome === "SELLER_FAVORABLE" ||
+        outcome === "FAVORABLE_TO_SELLER" ||
+        outcome === "SELLER_FAVOUR" ||
+        outcome.includes("SELLER_FAVOUR") ||
+        outcome === "RESOLVED_SELLER_FAVOUR" ||
+        // Check for negative buyer indicators (if buyer lost, seller won)
+        (outcome.includes("BUYER") && 
+         (outcome.includes("LOST") || 
+          outcome.includes("DENIED") || 
+          outcome.includes("REJECTED")))
       )
+      
+      if (isWon) {
+        console.log(`[Analytics] ✓ Dispute with outcome "${actualOutcome}" (from ${d.disputeOutcome ? 'stored' : 'rawData'}) is counted as WON`)
+      } else {
+        console.log(`[Analytics] ✗ Dispute with outcome "${actualOutcome}" (from ${d.disputeOutcome ? 'stored' : 'rawData'}) is NOT counted as WON (may be buyer win or unknown)`)
+      }
+      
+      return isWon
     }).length
+
+    console.log(
+      `[Analytics] Win Rate calculation: won=${won}, resolved=${resolvedCount}, winRate=${resolvedCount > 0 ? (won / resolvedCount) * 100 : 0}%`
+    )
 
     const winRate = resolvedCount > 0 ? (won / resolvedCount) * 100 : 0
 

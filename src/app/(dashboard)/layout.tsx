@@ -67,6 +67,22 @@ export default function DashboardLayout({
     const paths = pathname.split("/").filter(Boolean)
     const breadcrumbs = [{ label: "Home", href: "/" }]
 
+    // Custom breadcrumb mappings for specific routes
+    const customBreadcrumbs: Record<string, string> = {
+      "/admin/users": "User Management",
+      "/disputes": "Disputes",
+      "/accounts": "PayPal Accounts",
+      "/analytics": "Analytics",
+      "/settings": "Settings",
+      "/profile": "Profile",
+    }
+
+    // Check if current path has a custom breadcrumb
+    if (customBreadcrumbs[pathname]) {
+      breadcrumbs.push({ label: customBreadcrumbs[pathname], href: pathname })
+      return breadcrumbs
+    }
+
     let currentPath = ""
     paths.forEach((path, index) => {
       currentPath += `/${path}`
@@ -74,6 +90,11 @@ export default function DashboardLayout({
       if (index === paths.length - 1 && lastBreadcrumbLabel) {
         breadcrumbs.push({ label: lastBreadcrumbLabel, href: currentPath })
       } else {
+        // Skip "admin" in breadcrumb for /admin/users
+        if (path === "admin" && paths[paths.length - 1] === "users") {
+          return // Skip adding "Admin" breadcrumb
+        }
+        
         const label = path
           .split("-")
           .map((word) => word.charAt(0).toUpperCase() + word.slice(1))

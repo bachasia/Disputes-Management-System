@@ -38,36 +38,42 @@ export function GeneralSettings() {
   const fetchSettings = async () => {
     try {
       setLoading(true)
-      const response = await fetch("/api/settings")
       
-      if (response.ok) {
-        const data = await response.json()
-        const systemSettings = data.settings || {}
+      if (isAdmin) {
+        // Admin: Fetch from system settings
+        const response = await fetch("/api/settings")
         
-        // Get user preferences for non-admin settings
-        if (!isAdmin) {
-          const prefResponse = await fetch("/api/settings/user-preferences")
-          if (prefResponse.ok) {
-            const prefData = await prefResponse.json()
-            const prefs = prefData.preferences || {}
-            setSettings({
-              timezone: prefs.timezone || "UTC",
-              dateFormat: prefs.dateFormat || "MM/dd/yyyy",
-              timeFormat: prefs.timeFormat || "24h",
-              itemsPerPage: prefs.itemsPerPage || 20,
-              autoRefreshInterval: prefs.autoRefreshInterval || 0,
-            })
-            return
-          }
+        if (response.ok) {
+          const data = await response.json()
+          const systemSettings = data.settings || {}
+          setSettings({
+            timezone: systemSettings.timezone || "UTC",
+            dateFormat: systemSettings.dateFormat || "MM/dd/yyyy",
+            timeFormat: systemSettings.timeFormat || "24h",
+            itemsPerPage: parseInt(systemSettings.itemsPerPage || "20"),
+            autoRefreshInterval: parseInt(systemSettings.autoRefreshInterval || "0"),
+          })
+        } else {
+          console.error("Failed to fetch system settings:", response.status)
+          // Use defaults if fetch fails
         }
-
-        setSettings({
-          timezone: systemSettings.timezone || "UTC",
-          dateFormat: systemSettings.dateFormat || "MM/dd/yyyy",
-          timeFormat: systemSettings.timeFormat || "24h",
-          itemsPerPage: parseInt(systemSettings.itemsPerPage || "20"),
-          autoRefreshInterval: parseInt(systemSettings.autoRefreshInterval || "0"),
-        })
+      } else {
+        // Non-admin: Fetch from user preferences
+        const prefResponse = await fetch("/api/settings/user-preferences")
+        if (prefResponse.ok) {
+          const prefData = await prefResponse.json()
+          const prefs = prefData.preferences || {}
+          setSettings({
+            timezone: prefs.timezone || "UTC",
+            dateFormat: prefs.dateFormat || "MM/dd/yyyy",
+            timeFormat: prefs.timeFormat || "24h",
+            itemsPerPage: prefs.itemsPerPage || 20,
+            autoRefreshInterval: prefs.autoRefreshInterval || 0,
+          })
+        } else {
+          console.error("Failed to fetch user preferences:", prefResponse.status)
+          // Use defaults if fetch fails
+        }
       }
     } catch (error) {
       console.error("Error fetching settings:", error)

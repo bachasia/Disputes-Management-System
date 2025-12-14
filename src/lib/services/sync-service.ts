@@ -434,14 +434,24 @@ export class DisputeSyncService {
     // Determine dispute outcome based on status and state
     let disputeOutcome: string | null = null
     if (isResolved) {
-      // Check outcome field first
+      // Check outcome field first (this is the actual outcome from PayPal)
       if ((paypalDispute as any).outcome) {
         disputeOutcome = (paypalDispute as any).outcome
-      } else if (paypalDispute.status) {
+      } 
+      // Don't fallback to status or dispute_state if they are just "RESOLVED" or "CLOSED"
+      // as these don't indicate win/loss, only that the dispute is resolved
+      // Only use them if they contain more specific information
+      else if (paypalDispute.status && 
+               paypalDispute.status.toUpperCase() !== "RESOLVED" && 
+               paypalDispute.status.toUpperCase() !== "CLOSED") {
         disputeOutcome = paypalDispute.status
-      } else if (paypalDispute.dispute_state) {
+      } else if (paypalDispute.dispute_state && 
+                 paypalDispute.dispute_state.toUpperCase() !== "RESOLVED" && 
+                 paypalDispute.dispute_state.toUpperCase() !== "CLOSED") {
         disputeOutcome = paypalDispute.dispute_state
       }
+      // If no specific outcome found, leave it as null
+      // We can't determine win/loss without actual outcome data
     }
 
     // Parse amount - try multiple possible locations

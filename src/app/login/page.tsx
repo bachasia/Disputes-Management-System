@@ -21,6 +21,7 @@ export default function LoginPage() {
   const searchParams = useSearchParams()
   const [showPassword, setShowPassword] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(false)
+  const [loginError, setLoginError] = React.useState<string | null>(null)
 
   const {
     register,
@@ -30,6 +31,27 @@ export default function LoginPage() {
 
   const callbackUrl = searchParams.get("callbackUrl") || "/disputes"
   const error = searchParams.get("error")
+
+  // Security: Remove sensitive query params from URL
+  React.useEffect(() => {
+    const email = searchParams.get("email")
+    const password = searchParams.get("password")
+    
+    // If email or password are in URL, remove them immediately for security
+    if (email || password) {
+      console.warn("[Security] Sensitive credentials detected in URL, removing...")
+      const newSearchParams = new URLSearchParams(searchParams.toString())
+      newSearchParams.delete("email")
+      newSearchParams.delete("password")
+      
+      const newUrl = newSearchParams.toString()
+        ? `/login?${newSearchParams.toString()}`
+        : "/login"
+      
+      // Replace URL without sensitive params (no page reload)
+      router.replace(newUrl, { scroll: false })
+    }
+  }, [searchParams, router])
 
   React.useEffect(() => {
     if (error) {
@@ -43,23 +65,70 @@ export default function LoginPage() {
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true)
+    setLoginError(null) // Clear previous errors
+    
     try {
+      // Trim email to avoid whitespace issues and normalize to lowercase
+      const email = data.email.trim().toLowerCase()
+      const password = data.password
+
+      // Validate email format
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setLoginError("Please enter a valid email address")
+        setIsLoading(false)
+        return
+      }
+
+      // Validate password
+      if (!password || password.length === 0) {
+        setLoginError("Please enter your password")
+        setIsLoading(false)
+        return
+      }
+
+      console.log("[Login] Attempting login for:", email)
+
       const result = await signIn("credentials", {
-        email: data.email,
-        password: data.password,
+        email: email,
+        password: password,
         redirect: false,
       })
 
+      console.log("[Login] SignIn result:", { ok: result?.ok, error: result?.error })
+
       if (result?.error) {
-        toast.error("Invalid email or password")
+        console.error("[Login] SignIn error:", result.error)
+        let errorMessage = "Invalid email or password. Please check your credentials and try again."
+        
+        if (result.error === "CredentialsSignin") {
+          errorMessage = "Invalid email or password. Please check your credentials and try again."
+        } else if (result.error.includes("deactivated")) {
+          errorMessage = "Your account has been deactivated. Please contact an administrator."
+        } else {
+          errorMessage = `Login failed: ${result.error}`
+        }
+        
+        setLoginError(errorMessage)
+        toast.error(errorMessage)
       } else if (result?.ok) {
+        console.log("[Login] Login successful, redirecting to:", callbackUrl)
+        setLoginError(null)
         toast.success("Login successful!")
-        router.push(callbackUrl)
-        router.refresh()
+        // Small delay to ensure session is set
+        setTimeout(() => {
+          router.push(callbackUrl)
+          router.refresh()
+        }, 100)
+      } else {
+        const errorMessage = "An unexpected error occurred. Please try again."
+        setLoginError(errorMessage)
+        toast.error(errorMessage)
       }
     } catch (error) {
-      console.error("Login error:", error)
-      toast.error("An error occurred during login")
+      console.error("[Login] Unexpected error:", error)
+      const errorMessage = "An error occurred during login. Please try again."
+      setLoginError(errorMessage)
+      toast.error(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -80,11 +149,25 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <form 
+            onSubmit={handleSubmit(onSubmit)} 
+            className="space-y-4"
+            method="POST"
+            action="#"
+          >
+            {/* Error from URL params (NextAuth redirect) */}
             {error && error !== "CredentialsSignin" && (
               <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive flex items-center gap-2">
-                <AlertCircle className="h-4 w-4" />
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
                 <span>An error occurred. Please try again.</span>
+              </div>
+            )}
+
+            {/* Error from form submission */}
+            {loginError && (
+              <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <span className="flex-1">{loginError}</span>
               </div>
             )}
 
@@ -159,11 +242,11 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-6 text-center text-sm text-muted-foreground">
-            <p>Default credentials:</p>
-            <p className="mt-2 font-mono text-xs">
+            <p className="text-xs">Default credentials (change after first login):</p>
+            <p className="mt-2 font-mono text-xs break-all">
               Admin: admin@example.com / Admin@123456
             </p>
-            <p className="font-mono text-xs">
+            <p className="font-mono text-xs break-all">
               User: user@example.com / User@123456
             </p>
           </div>

@@ -14,6 +14,7 @@
     "db:seed": "tsx --env-file=.env.local prisma/seed.ts",
     "db:reset": "dotenv -e .env.local -- prisma migrate reset --force && npm run db:seed",
     "db:update-passwords": "tsx --env-file=.env.local prisma/update-passwords.ts",
+    "db:fix-outcomes": "tsx --env-file=.env.local prisma/fix-dispute-outcomes.ts",
     "test:paypal": "tsx --env-file=.env.local prisma/test-paypal-credentials.ts"
   },
   "dependencies": {
