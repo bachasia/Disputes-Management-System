@@ -23,6 +23,8 @@ function LoginForm() {
   const [showPassword, setShowPassword] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(false)
   const [loginError, setLoginError] = React.useState<string | null>(null)
+  const [callbackUrl, setCallbackUrl] = React.useState("/disputes")
+  const [urlError, setUrlError] = React.useState<string | null>(null)
 
   const {
     register,
@@ -30,8 +32,14 @@ function LoginForm() {
     formState: { errors },
   } = useForm<LoginFormData>()
 
-  const callbackUrl = searchParams.get("callbackUrl") || "/disputes"
-  const error = searchParams.get("error")
+  // Initialize from searchParams in useEffect to avoid hydration mismatch
+  React.useEffect(() => {
+    const urlCallbackUrl = searchParams.get("callbackUrl") || "/disputes"
+    const urlErrorParam = searchParams.get("error")
+    
+    setCallbackUrl(urlCallbackUrl)
+    setUrlError(urlErrorParam)
+  }, [searchParams])
 
   // Security: Remove sensitive query params from URL
   React.useEffect(() => {
@@ -55,14 +63,14 @@ function LoginForm() {
   }, [searchParams, router])
 
   React.useEffect(() => {
-    if (error) {
-      if (error === "CredentialsSignin") {
+    if (urlError) {
+      if (urlError === "CredentialsSignin") {
         toast.error("Invalid email or password")
       } else {
         toast.error("An error occurred during login")
       }
     }
-  }, [error])
+  }, [urlError])
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true)
@@ -157,7 +165,7 @@ function LoginForm() {
             action="#"
           >
             {/* Error from URL params (NextAuth redirect) */}
-            {error && error !== "CredentialsSignin" && (
+            {urlError && urlError !== "CredentialsSignin" && (
               <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive flex items-center gap-2">
                 <AlertCircle className="h-4 w-4 flex-shrink-0" />
                 <span>An error occurred. Please try again.</span>
@@ -261,24 +269,11 @@ export default function LoginPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="space-y-1 text-center">
-            <div className="flex justify-center mb-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-600 text-white">
-                <Shield className="h-6 w-6" />
-              </div>
-            </div>
-            <CardTitle className="text-2xl font-bold">PayPal Disputes Dashboard</CardTitle>
-            <CardDescription>
-              Sign in to manage your PayPal disputes
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
+        <div className="w-full max-w-md">
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        </div>
       </div>
     }>
       <LoginForm />

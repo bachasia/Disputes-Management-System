@@ -17,6 +17,7 @@ import {
   Clock,
   CheckCircle,
   XCircle,
+  Sparkles,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -27,6 +28,7 @@ import { ReasonBadge } from "@/components/disputes/ReasonBadge"
 import { AcceptClaimModal } from "@/components/disputes/AcceptClaimModal"
 import { ProvideEvidenceModal } from "@/components/disputes/ProvideEvidenceModal"
 import { SendMessageModal } from "@/components/disputes/SendMessageModal"
+import { AIAssistantsModal } from "@/components/disputes/AIAssistantsModal"
 
 interface DisputeDetail {
   id: string
@@ -83,6 +85,7 @@ export default function DisputeDetailPage() {
   const [acceptClaimOpen, setAcceptClaimOpen] = React.useState(false)
   const [provideEvidenceOpen, setProvideEvidenceOpen] = React.useState(false)
   const [sendMessageOpen, setSendMessageOpen] = React.useState(false)
+  const [aiAssistantsOpen, setAiAssistantsOpen] = React.useState(false)
 
   const fetchDisputeDetail = React.useCallback(async () => {
     setLoading(true)
@@ -248,6 +251,13 @@ export default function DisputeDetailPage() {
               >
                 <MessageSquare className="mr-2 h-4 w-4" />
                 Send Message
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setAiAssistantsOpen(true)}
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                AI Assistants
               </Button>
             </div>
           )}
@@ -566,19 +576,31 @@ export default function DisputeDetailPage() {
       <AcceptClaimModal
         open={acceptClaimOpen}
         onOpenChange={setAcceptClaimOpen}
-        disputeId={dispute.disputeId}
+        disputeId={dispute.id}
         onSuccess={fetchDisputeDetail}
       />
       <ProvideEvidenceModal
         open={provideEvidenceOpen}
         onOpenChange={setProvideEvidenceOpen}
-        disputeId={dispute.disputeId}
+        disputeId={dispute.id}
         onSuccess={fetchDisputeDetail}
       />
       <SendMessageModal
         open={sendMessageOpen}
         onOpenChange={setSendMessageOpen}
-        disputeId={dispute.disputeId}
+        disputeId={dispute.id}
+        onSuccess={fetchDisputeDetail}
+      />
+      <AIAssistantsModal
+        open={aiAssistantsOpen}
+        onOpenChange={setAiAssistantsOpen}
+        disputeId={dispute.id}
+        disputeData={{
+          caseId: dispute.disputeId,
+          invoiceNumber: dispute.invoiceNumber,
+          disputeReason: dispute.disputeReason,
+          rawData: dispute.rawData,
+        }}
         onSuccess={fetchDisputeDetail}
       />
     </div>
