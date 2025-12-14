@@ -13,18 +13,10 @@ done
 
 echo "Database is ready!"
 
-# Run migrations using local Prisma CLI (from node_modules)
+# Run migrations using Prisma CLI
 echo "Running migrations..."
-if [ -f "./node_modules/.bin/prisma" ]; then
-  ./node_modules/.bin/prisma migrate deploy
-elif [ -f "./node_modules/prisma/package.json" ]; then
-  # Use npx with specific version from package.json
-  PRISMA_VERSION=$(node -p "require('./node_modules/prisma/package.json').version" 2>/dev/null || echo "5.19.0")
-  npx "prisma@${PRISMA_VERSION}" migrate deploy
-else
-  # Fallback: use version from package.json or default
-  npx prisma@5.19.0 migrate deploy
-fi
+# Use npx to run Prisma CLI (works with global install or local)
+npx prisma@5.19.0 migrate deploy
 
 # Start the application
 echo "Starting Next.js..."
