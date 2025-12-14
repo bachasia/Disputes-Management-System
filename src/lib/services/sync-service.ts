@@ -502,8 +502,8 @@ export class DisputeSyncService {
     }
 
     // Get transaction ID from disputed_transactions or transactions
-    const transactionId = transaction?.seller_transaction_id || 
-                         transaction?.buyer_transaction_id || 
+    const transactionId = transaction?.seller_transaction_id ||
+                         (transaction && 'buyer_transaction_id' in transaction ? transaction.buyer_transaction_id : undefined) ||
                          null
 
     // Get invoice number from transaction
