@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
         email: true,
         role: true,
         active: true,
+        lastLoginAt: true,
         createdAt: true,
         updatedAt: true,
         _count: {
@@ -126,6 +127,7 @@ export async function POST(request: NextRequest) {
         email: true,
         role: true,
         active: true,
+        lastLoginAt: true,
         createdAt: true,
         updatedAt: true,
       },

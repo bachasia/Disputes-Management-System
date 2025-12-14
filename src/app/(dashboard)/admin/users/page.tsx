@@ -16,15 +16,13 @@ interface User {
   email: string
   role: string
   active: boolean
+  lastLoginAt: string | null
   createdAt: string
   updatedAt: string
   _count?: {
     sessions: number
     accountPermissions: number
   }
-  // For backward compatibility
-  created_at?: string
-  last_login?: string | null
 }
 
 export default function UsersManagementPage() {

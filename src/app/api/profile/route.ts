@@ -28,17 +28,9 @@ export async function GET(request: NextRequest) {
         role: true,
         image: true,
         active: true,
+        lastLoginAt: true,
         createdAt: true,
         updatedAt: true,
-        sessions: {
-          select: {
-            expires: true,
-          },
-          orderBy: {
-            expires: "desc",
-          },
-          take: 1,
-        },
       },
     })
 
@@ -58,7 +50,7 @@ export async function GET(request: NextRequest) {
       active: user.active,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-      lastLogin: user.sessions[0]?.expires || null,
+      lastLogin: user.lastLoginAt,
     })
   } catch (error) {
     console.error("Error fetching profile:", error)
@@ -89,7 +81,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, image } = body
+    const { name, email, image } = body
 
     // Validate name if provided
     if (name !== undefined && (!name || name.trim().length === 0)) {
@@ -99,9 +91,33 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    // Validate email if provided
+    if (email !== undefined) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!email || !emailRegex.test(email.trim())) {
+        return NextResponse.json(
+          { error: "Invalid email format" },
+          { status: 400 }
+        )
+      }
+
+      // Check if email is already taken by another user
+      const existingUser = await prisma.user.findUnique({
+        where: { email: email.trim().toLowerCase() },
+      })
+
+      if (existingUser && existingUser.id !== session.user.id) {
+        return NextResponse.json(
+          { error: "Email is already taken by another user" },
+          { status: 400 }
+        )
+      }
+    }
+
     // Prepare update data
     const updateData: any = {}
     if (name !== undefined) updateData.name = name.trim()
+    if (email !== undefined) updateData.email = email.trim().toLowerCase()
     if (image !== undefined) updateData.image = image
 
     const user = await prisma.user.update({
@@ -114,6 +130,7 @@ export async function PUT(request: NextRequest) {
         role: true,
         image: true,
         active: true,
+        lastLoginAt: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -128,6 +145,7 @@ export async function PUT(request: NextRequest) {
       active: user.active,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
+      lastLogin: user.lastLoginAt,
     })
   } catch (error) {
     console.error("Error updating profile:", error)

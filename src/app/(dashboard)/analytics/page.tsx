@@ -12,8 +12,18 @@ import {
 } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import { KPICards } from "@/components/analytics/KPICards"
-import { DisputesOverTimeChart } from "@/components/analytics/DisputesOverTimeChart"
-import { DisputesByStatusChart } from "@/components/analytics/DisputesByStatusChart"
+// Lazy load charts for better code splitting
+import dynamic from "next/dynamic"
+
+const DisputesOverTimeChart = dynamic(
+  () => import("@/components/analytics/DisputesOverTimeChart").then((mod) => ({ default: mod.DisputesOverTimeChart })),
+  { ssr: false }
+)
+
+const DisputesByStatusChart = dynamic(
+  () => import("@/components/analytics/DisputesByStatusChart").then((mod) => ({ default: mod.DisputesByStatusChart })),
+  { ssr: false }
+)
 import {
   Select,
   SelectContent,

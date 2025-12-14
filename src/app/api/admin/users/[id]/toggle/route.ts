@@ -62,6 +62,7 @@ export async function PATCH(
         email: true,
         role: true,
         active: true,
+        lastLoginAt: true,
         updatedAt: true,
         createdAt: true,
       },

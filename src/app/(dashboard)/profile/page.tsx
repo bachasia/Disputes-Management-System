@@ -27,6 +27,7 @@ interface ProfileData {
 
 interface ProfileFormData {
   name: string
+  email: string
 }
 
 interface ChangePasswordFormData {
@@ -73,7 +74,10 @@ export default function ProfilePage() {
         }
         const data = await response.json()
         setProfile(data)
-        resetProfile({ name: data.name || "" })
+        resetProfile({ 
+          name: data.name || "",
+          email: data.email || ""
+        })
       } catch (error) {
         console.error("Error fetching profile:", error)
         toast.error("Failed to load profile")
@@ -230,19 +234,28 @@ export default function ProfilePage() {
                   )}
                 </div>
 
-                {/* Email (readonly) */}
+                {/* Email (editable) */}
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">
+                    Email <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="email"
                     type="email"
-                    value={profile.email}
-                    disabled
-                    className="bg-muted"
+                    {...registerProfile("email", {
+                      required: "Email is required",
+                      pattern: {
+                        value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                        message: "Invalid email format",
+                      },
+                    })}
+                    placeholder="your.email@example.com"
                   />
-                  <p className="text-sm text-muted-foreground">
-                    Email cannot be changed
-                  </p>
+                  {profileErrors.email && (
+                    <p className="text-sm text-destructive">
+                      {profileErrors.email.message}
+                    </p>
+                  )}
                 </div>
 
                 {/* Role (readonly) */}

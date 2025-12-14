@@ -1,25 +1,28 @@
-# Hướng dẫn Regenerate Prisma Client
+# Regenerate Prisma Client
 
-Khi thêm field mới vào Prisma schema, bạn cần regenerate Prisma Client.
+## Vấn đề
+Lỗi `Unknown field 'lastLoginAt'` xảy ra vì Prisma Client chưa được regenerate sau khi thêm field mới vào schema.
 
-## Các bước:
+## Giải pháp
 
-1. **Dừng Dev Server:**
+1. **Dừng dev server** (nếu đang chạy):
    - Nhấn `Ctrl+C` trong terminal đang chạy `npm run dev`
 
-2. **Regenerate Prisma Client:**
-   ```powershell
+2. **Regenerate Prisma Client**:
+   ```bash
    npm run db:generate
    ```
+   hoặc
+   ```bash
+   npx prisma generate
+   ```
 
-3. **Khởi động lại Dev Server:**
-   ```powershell
+3. **Khởi động lại dev server**:
+   ```bash
    npm run dev
    ```
 
-## Lưu ý:
-
-- Nếu gặp lỗi `EPERM: operation not permitted`, đảm bảo dev server đã được dừng hoàn toàn
-- Sau khi regenerate, restart dev server để áp dụng thay đổi
-- Field `invoiceNumber` đã được thêm vào schema và sẽ hoạt động sau khi regenerate
-
+## Lưu ý
+- Lỗi `EPERM` xảy ra khi dev server đang chạy và lock file Prisma Client
+- Cần dừng dev server trước khi regenerate
+- Sau khi regenerate xong, khởi động lại dev server

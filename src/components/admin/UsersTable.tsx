@@ -28,6 +28,7 @@ interface User {
   email: string
   role: string
   active: boolean
+  lastLoginAt: string | null
   createdAt: string
   updatedAt: string
   _count?: {
@@ -111,9 +112,16 @@ export function UsersTable({
                     {format(new Date(user.createdAt), "MMM d, yyyy")}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {user._count?.sessions && user._count.sessions > 0
-                      ? `${user._count.sessions} session(s)`
+                    {user.lastLoginAt
+                      ? formatDistanceToNow(new Date(user.lastLoginAt), {
+                          addSuffix: true,
+                        })
                       : "Never"}
+                    {user.lastLoginAt && (
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {format(new Date(user.lastLoginAt), "MMM d, yyyy 'at' h:mm a")}
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>

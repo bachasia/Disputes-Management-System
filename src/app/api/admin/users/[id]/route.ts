@@ -43,6 +43,7 @@ export async function GET(
         email: true,
         role: true,
         active: true,
+        lastLoginAt: true,
         createdAt: true,
         updatedAt: true,
         _count: {
@@ -172,6 +173,7 @@ export async function PUT(
         email: true,
         role: true,
         active: true,
+        lastLoginAt: true,
         updatedAt: true,
         createdAt: true,
       },
