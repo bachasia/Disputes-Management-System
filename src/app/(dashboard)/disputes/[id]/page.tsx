@@ -18,6 +18,7 @@ import {
   CheckCircle,
   XCircle,
   Sparkles,
+  Handshake,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -30,6 +31,7 @@ import { AcceptClaimModal } from "@/components/disputes/AcceptClaimModal"
 import { ProvideEvidenceModal } from "@/components/disputes/ProvideEvidenceModal"
 import { SendMessageModal } from "@/components/disputes/SendMessageModal"
 import { AIAssistantsModal } from "@/components/disputes/AIAssistantsModal"
+import { MakeOfferModal } from "@/components/disputes/MakeOfferModal"
 
 interface DisputeDetail {
   id: string
@@ -88,6 +90,7 @@ export default function DisputeDetailPage() {
   const [provideEvidenceOpen, setProvideEvidenceOpen] = React.useState(false)
   const [sendMessageOpen, setSendMessageOpen] = React.useState(false)
   const [aiAssistantsOpen, setAiAssistantsOpen] = React.useState(false)
+  const [makeOfferOpen, setMakeOfferOpen] = React.useState(false)
 
   const fetchDisputeDetail = React.useCallback(async () => {
     setLoading(true)
@@ -258,6 +261,14 @@ export default function DisputeDetailPage() {
               >
                 <MessageSquare className="mr-2 h-4 w-4" />
                 Send Message
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setMakeOfferOpen(true)}
+                disabled={dispute.disputeStatus === "RESOLVED"}
+              >
+                <Handshake className="mr-2 h-4 w-4" />
+                Make Offer
               </Button>
               <Button
                 variant="outline"
@@ -608,6 +619,14 @@ export default function DisputeDetailPage() {
           disputeReason: dispute.disputeReason,
           rawData: dispute.rawData,
         }}
+        onSuccess={fetchDisputeDetail}
+      />
+      <MakeOfferModal
+        open={makeOfferOpen}
+        onOpenChange={setMakeOfferOpen}
+        disputeId={dispute.id}
+        disputeAmount={dispute.disputeAmount}
+        disputeCurrency={dispute.disputeCurrency}
         onSuccess={fetchDisputeDetail}
       />
     </div>

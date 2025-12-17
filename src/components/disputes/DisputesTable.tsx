@@ -293,14 +293,16 @@ export function DisputesTable({ accountId, filters }: DisputesTableProps) {
                     <ReasonBadge reason={dispute.disputeReason} />
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <StatusBadge status={dispute.disputeStatus} />
+                    {dispute.disputeStatus?.toUpperCase() === "RESOLVED" || 
+                     dispute.disputeStatus?.toUpperCase() === "CLOSED" ? (
                       <OutcomeBadge 
                         outcome={dispute.disputeOutcome} 
                         rawData={dispute.rawData}
                         disputeStatus={dispute.disputeStatus}
                       />
-                    </div>
+                    ) : (
+                      <StatusBadge status={dispute.disputeStatus} />
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="text-sm">

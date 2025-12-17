@@ -105,15 +105,24 @@ export class PayPalClient {
       }
     }
 
+    // Determine Content-Type: if data is FormData, let axios set it automatically
+    const isFormData = data instanceof FormData
+    const contentType = isFormData ? undefined : "application/json"
+
     const requestConfig: AxiosRequestConfig = {
       method,
       url,
       headers: {
         Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+        ...(contentType && { "Content-Type": contentType }),
         ...config?.headers,
       },
       ...config,
+    }
+
+    // Remove Content-Type from headers if FormData (axios will set it with boundary)
+    if (isFormData && requestConfig.headers) {
+      delete (requestConfig.headers as any)["Content-Type"]
     }
 
     if (data) {

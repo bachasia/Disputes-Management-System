@@ -20,7 +20,6 @@ export async function POST(
     if (permissionError) return permissionError
 
     const { id } = params
-    const body = await request.json()
 
     // Get dispute with account
     const dispute = await prisma.dispute.findUnique({
@@ -56,12 +55,59 @@ export async function POST(
     )
     const disputesAPI = new PayPalDisputesAPI(paypalClient)
 
+    // Parse FormData
+    const formData = await request.formData()
+    const files = formData.getAll("evidence-file") as File[]
+    const evidenceJson = formData.get("evidence")
+
+    let evidence: any[] = []
+    let note: string | undefined
+
+    // Parse evidence JSON if provided
+    if (evidenceJson && typeof evidenceJson === "string") {
+      try {
+        const evidenceData = JSON.parse(evidenceJson)
+        evidence = evidenceData.evidence || []
+        note = evidenceData.note
+      } catch (e) {
+        console.error("Error parsing evidence JSON:", e)
+      }
+    }
+
     // Provide evidence via PayPal API
-    await disputesAPI.provideEvidence(
-      dispute.disputeId,
-      body.evidence,
-      body.note
-    )
+    // Priority: If files are provided, use file upload method (multipart/form-data)
+    // Otherwise, use JSON method for tracking info and notes
+    if (files.length > 0) {
+      // For each file, call PayPal API with multipart/form-data
+      // According to PayPal docs, each file should be sent separately
+      for (const file of files) {
+        await disputesAPI.provideEvidenceWithFile(
+          dispute.disputeId,
+          file
+        )
+      }
+      
+      // If there's also tracking info or note, send them separately via JSON
+      if (evidence.length > 0 || note) {
+        await disputesAPI.provideEvidence(
+          dispute.disputeId,
+          evidence,
+          note
+        )
+      }
+    } else if (evidence.length > 0) {
+      // Only JSON method if no files
+      await disputesAPI.provideEvidence(
+        dispute.disputeId,
+        evidence,
+        note
+      )
+    } else {
+      return NextResponse.json(
+        { error: "Bad Request", message: "Please provide at least one piece of evidence" },
+        { status: 400 }
+      )
+    }
 
     // Create history record
     await prisma.disputeHistory.create({
@@ -69,8 +115,11 @@ export async function POST(
         disputeId: id,
         actionType: "EVIDENCE_PROVIDED",
         actionBy: "USER",
-        description: body.note || "Evidence provided",
-        metadata: { evidence: body.evidence },
+        description: note || `Evidence provided${files.length > 0 ? ` with ${files.length} file(s)` : ""}`,
+        metadata: { 
+          evidence: evidence.length > 0 ? evidence : undefined,
+          filesCount: files.length,
+        },
       },
     })
 

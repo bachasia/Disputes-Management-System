@@ -115,10 +115,6 @@ export interface ListDisputesParams {
   // Note: PayPal API doesn't support 'page' parameter, use pagination links instead
 }
 
-export interface AcceptClaimRequest {
-  note?: string
-}
-
 export interface AcceptClaimResponse {
   dispute_id: string
   status: string
@@ -189,6 +185,43 @@ export interface SendMessageResponse {
   }>
 }
 
+export interface MakeOfferRequest {
+  note: string
+  offer_type: "REFUND" | "REFUND_WITH_RETURN" | "REFUND_WITH_REPLACEMENT" | "REPLACEMENT_WITHOUT_REFUND"
+  offer_amount: {
+    currency_code: string
+    value: string
+  }
+  return_shipping_address?: {
+    country_code: string
+    address_line_1?: string
+    address_line_2?: string
+    address_line_3?: string
+    admin_area_4?: string
+    admin_area_3?: string
+    admin_area_2?: string
+    admin_area_1?: string
+    postal_code?: string
+    address_details?: {
+      street_number?: string
+      street_name?: string
+      street_type?: string
+      delivery_service?: string
+      building_name?: string
+      sub_building?: string
+    }
+  }
+  invoice_id?: string
+}
+
+export interface MakeOfferResponse {
+  links?: Array<{
+    href: string
+    rel: string
+    method: string
+  }>
+}
+
 /**
  * PayPal Disputes API Client
  */
@@ -239,21 +272,43 @@ export class PayPalDisputesAPI {
   /**
    * Accept claim for a dispute
    * POST /v1/customer/disputes/{id}/accept-claim
+   * According to PayPal docs: https://docs.paypal.ai/reference/api/rest/disputes-actions/accept-claim
+   * Uses multipart/form-data with optional accept-claim-document file
    */
   async acceptClaim(
     disputeId: string,
-    note?: string
+    file?: File | Blob
   ): Promise<AcceptClaimResponse> {
-    const body: AcceptClaimRequest = {}
-    if (note) {
-      body.note = note
-    }
+    // According to PayPal docs, accept-claim uses multipart/form-data
+    // with optional accept-claim-document file
+    if (file) {
+      const formData = new FormData()
+      formData.append("accept-claim-document", file)
 
-    return this.client.request<AcceptClaimResponse>(
-      "POST",
-      `/v1/customer/disputes/${disputeId}/accept-claim`,
-      body
-    )
+      return this.client.request<AcceptClaimResponse>(
+        "POST",
+        `/v1/customer/disputes/${disputeId}/accept-claim`,
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      )
+    } else {
+      // If no file, send empty FormData
+      const formData = new FormData()
+      return this.client.request<AcceptClaimResponse>(
+        "POST",
+        `/v1/customer/disputes/${disputeId}/accept-claim`,
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      )
+    }
   }
 
   /**
@@ -276,6 +331,31 @@ export class PayPalDisputesAPI {
       "POST",
       `/v1/customer/disputes/${disputeId}/provide-evidence`,
       body
+    )
+  }
+
+  /**
+   * Provide evidence with file upload (multipart/form-data)
+   * POST /v1/customer/disputes/{id}/provide-evidence
+   * According to PayPal docs: https://docs.paypal.ai/reference/api/rest/disputes-actions/provide-evidence
+   */
+  async provideEvidenceWithFile(
+    disputeId: string,
+    file: File | Blob
+  ): Promise<ProvideEvidenceResponse> {
+    // Create FormData for multipart/form-data
+    const formData = new FormData()
+    formData.append("evidence-file", file)
+
+    return this.client.request<ProvideEvidenceResponse>(
+      "POST",
+      `/v1/customer/disputes/${disputeId}/provide-evidence`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
     )
   }
 
@@ -303,6 +383,23 @@ export class PayPalDisputesAPI {
       "POST",
       `/v1/customer/disputes/${disputeId}/send-message`,
       body
+    )
+  }
+
+  /**
+   * Make offer to resolve dispute
+   * POST /v1/customer/disputes/{id}/make-offer
+   * According to PayPal docs: https://docs.paypal.ai/reference/api/rest/disputes-actions/make-offer-to-resolve-dispute
+   * Note: Only works when dispute stage is INQUIRY
+   */
+  async makeOffer(
+    disputeId: string,
+    offer: MakeOfferRequest
+  ): Promise<MakeOfferResponse> {
+    return this.client.request<MakeOfferResponse>(
+      "POST",
+      `/v1/customer/disputes/${disputeId}/make-offer`,
+      offer
     )
   }
 }
