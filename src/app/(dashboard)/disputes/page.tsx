@@ -309,7 +309,7 @@ export default function DisputesPage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
+            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
               {Object.keys(stats.totalAmountByCurrency).length > 0 ? (
                 Object.entries(stats.totalAmountByCurrency)
                   .sort(([a], [b]) => {
@@ -318,15 +318,13 @@ export default function DisputesPage() {
                     if (b === "USD") return 1
                     return a.localeCompare(b)
                   })
-                  .map(([currency, amount]) => (
-                    <div key={currency}>
-                      <div className="text-2xl font-bold">
+                  .map(([currency, amount], index, array) => (
+                    <div key={currency} className="flex items-baseline gap-1">
+                      <span className="text-2xl font-bold">
                         {formatCurrency(amount, currency)}
-                      </div>
-                      {Object.keys(stats.totalAmountByCurrency).length > 1 && (
-                        <div className="text-xs text-muted-foreground">
-                          {currency}
-                        </div>
+                      </span>
+                      {array.length > 1 && index < array.length - 1 && (
+                        <span className="text-muted-foreground">•</span>
                       )}
                     </div>
                   ))
