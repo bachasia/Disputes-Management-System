@@ -52,6 +52,7 @@ export default function DisputesPage() {
     open: 0,
     resolved: 0,
     totalAmount: 0,
+    totalAmountByCurrency: {} as Record<string, number>,
   })
 
   // Fetch stats
@@ -101,6 +102,7 @@ export default function DisputesPage() {
         open: data.open || 0,
         resolved: data.resolved || 0,
         totalAmount: data.totalAmount || 0,
+        totalAmountByCurrency: data.totalAmountByCurrency || {},
       })
     } catch (error) {
       console.error("Error fetching stats:", error)
@@ -158,10 +160,10 @@ export default function DisputesPage() {
     setFilters(newFilters)
   }
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number, currency: string = "USD") => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: "USD",
+      currency: currency,
     }).format(amount)
   }
 
@@ -307,10 +309,34 @@ export default function DisputesPage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(stats.totalAmount)}
+            <div className="space-y-2">
+              {Object.keys(stats.totalAmountByCurrency).length > 0 ? (
+                Object.entries(stats.totalAmountByCurrency)
+                  .sort(([a], [b]) => {
+                    // Sort USD first, then alphabetically
+                    if (a === "USD") return -1
+                    if (b === "USD") return 1
+                    return a.localeCompare(b)
+                  })
+                  .map(([currency, amount]) => (
+                    <div key={currency}>
+                      <div className="text-2xl font-bold">
+                        {formatCurrency(amount, currency)}
+                      </div>
+                      {Object.keys(stats.totalAmountByCurrency).length > 1 && (
+                        <div className="text-xs text-muted-foreground">
+                          {currency}
+                        </div>
+                      )}
+                    </div>
+                  ))
+              ) : (
+                <div className="text-2xl font-bold">
+                  {formatCurrency(stats.totalAmount)}
+                </div>
+              )}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground mt-2">
               Total dispute value
             </p>
           </CardContent>
