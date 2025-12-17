@@ -47,3 +47,4 @@ export function getLastBreadcrumbLabel(): string | null {
   return (window as any).__lastBreadcrumbLabel || null
 }
 
+

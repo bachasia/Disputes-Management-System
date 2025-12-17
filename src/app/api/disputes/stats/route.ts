@@ -79,6 +79,7 @@ export async function GET(request: NextRequest) {
         disputeOutcome: true,
         disputeAmount: true,
         disputeCurrency: true,
+        resolvedAt: true,
       },
     })
 
@@ -93,12 +94,15 @@ export async function GET(request: NextRequest) {
           d.disputeStatus.toUpperCase().includes("REVIEW"))
     ).length
 
-    const resolved = disputes.filter(
-      (d) =>
-        d.disputeStatus &&
-        (d.disputeStatus.toUpperCase() === "RESOLVED" ||
-          d.disputeStatus.toUpperCase() === "CLOSED")
-    )
+    // Consider disputes resolved if:
+    // 1. Status is RESOLVED or CLOSED, OR
+    // 2. resolvedAt field is set (even if status is not explicitly RESOLVED)
+    const resolved = disputes.filter((d) => {
+      const status = d.disputeStatus?.toUpperCase() || ""
+      const isStatusResolved = status === "RESOLVED" || status === "CLOSED"
+      const hasResolvedAt = !!d.resolvedAt
+      return isStatusResolved || hasResolvedAt
+    })
 
     const resolvedCount = resolved.length
 

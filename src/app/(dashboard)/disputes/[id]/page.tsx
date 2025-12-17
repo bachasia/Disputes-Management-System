@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2 } from "lucide-react"
 import { StatusBadge } from "@/components/disputes/StatusBadge"
 import { ReasonBadge } from "@/components/disputes/ReasonBadge"
+import { OutcomeBadge } from "@/components/disputes/OutcomeBadge"
 import { AcceptClaimModal } from "@/components/disputes/AcceptClaimModal"
 import { ProvideEvidenceModal } from "@/components/disputes/ProvideEvidenceModal"
 import { SendMessageModal } from "@/components/disputes/SendMessageModal"
@@ -42,6 +43,7 @@ interface DisputeDetail {
   disputeType: string | null
   disputeReason: string | null
   disputeStatus: string | null
+  disputeOutcome: string | null
   disputeCreateTime: Date | null
   disputeUpdateTime: Date | null
   responseDueDate: Date | null
@@ -209,6 +211,11 @@ export default function DisputeDetailPage() {
               </div>
               <div className="flex items-center gap-3">
                 <StatusBadge status={dispute.disputeStatus} />
+                <OutcomeBadge 
+                  outcome={dispute.disputeOutcome} 
+                  rawData={dispute.rawData}
+                  disputeStatus={dispute.disputeStatus}
+                />
                 <ReasonBadge reason={dispute.disputeReason} />
               </div>
               <div className="text-sm text-muted-foreground">

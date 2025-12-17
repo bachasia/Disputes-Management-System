@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { UserAvatar } from "./UserAvatar"
 import { RoleBadge } from "./RoleBadge"
+import { getLoginUrl } from "@/lib/utils/auth"
 
 export function UserMenu() {
   const { data: session, status } = useSession()
@@ -30,8 +31,10 @@ export function UserMenu() {
   const handleLogout = async () => {
     setIsLoading(true)
     try {
+      // Use absolute URL to ensure no port is included in production
+      const loginUrl = getLoginUrl()
       await signOut({
-        callbackUrl: "/login",
+        callbackUrl: loginUrl,
         redirect: true,
       })
     } catch (error) {

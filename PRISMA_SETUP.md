@@ -65,3 +65,4 @@ npx prisma studio
 - Timestamps tự động (created_at, updated_at)
 
 
+

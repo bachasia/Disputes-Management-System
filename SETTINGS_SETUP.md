@@ -93,3 +93,4 @@ SELECT * FROM user_preferences;
 - Notification Settings (Email notifications, SMTP)
 - Data Management (Retention, Export)
 
+

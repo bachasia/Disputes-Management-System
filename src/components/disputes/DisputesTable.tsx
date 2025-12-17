@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils"
 import type { DisputeFilters } from "./DisputeFilters"
 import { StatusBadge } from "./StatusBadge"
 import { ReasonBadge } from "./ReasonBadge"
+import { OutcomeBadge } from "./OutcomeBadge"
 
 interface Dispute {
   id: string
@@ -31,10 +32,12 @@ interface Dispute {
   disputeType: string | null
   disputeReason: string | null
   disputeStatus: string | null
+  disputeOutcome: string | null
   disputeCreateTime: Date | null
   disputeUpdateTime: Date | null
   responseDueDate: Date | null
   description: string | null
+  rawData: any | null
   paypalAccount: {
     id: string
     accountName: string
@@ -289,7 +292,16 @@ export function DisputesTable({ accountId, filters }: DisputesTableProps) {
                   <TableCell>
                     <ReasonBadge reason={dispute.disputeReason} />
                   </TableCell>
-                  <TableCell><StatusBadge status={dispute.disputeStatus} /></TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status={dispute.disputeStatus} />
+                      <OutcomeBadge 
+                        outcome={dispute.disputeOutcome} 
+                        rawData={dispute.rawData}
+                        disputeStatus={dispute.disputeStatus}
+                      />
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <div className="text-sm">
                       {dispute.customerEmail || dispute.customerName || "N/A"}
