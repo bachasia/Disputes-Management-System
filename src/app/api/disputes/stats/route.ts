@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
+import { Prisma } from "@prisma/client"
 
 // Force dynamic rendering (uses headers() from NextAuth)
 export const dynamic = 'force-dynamic'
@@ -23,18 +24,12 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
 
     // Build where clause (same as disputes route)
-    const where: any = {}
+    const where: Prisma.DisputeWhereInput = {}
 
     // Filter by account_id
     const accountId = searchParams.get("account_id")
     if (accountId) {
       where.paypalAccountId = accountId
-    }
-
-    // Filter by status
-    const status = searchParams.get("status")
-    if (status) {
-      where.disputeStatus = status
     }
 
     // Filter by dispute_type
@@ -59,21 +54,62 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Search filter
+    // Search filter (search in dispute_id, transaction_id, customer_email, customer_name, invoice_number)
+    const searchConditions: Prisma.DisputeWhereInput[] = []
     const search = searchParams.get("search")
     if (search) {
-      where.OR = [
-        { disputeId: { contains: search, mode: "insensitive" } },
-        { transactionId: { contains: search, mode: "insensitive" } },
-        { customerEmail: { contains: search, mode: "insensitive" } },
-        { customerName: { contains: search, mode: "insensitive" } },
-        { invoiceNumber: { contains: search, mode: "insensitive" } },
-      ]
+      searchConditions.push({
+        OR: [
+          { disputeId: { contains: search, mode: "insensitive" } },
+          { transactionId: { contains: search, mode: "insensitive" } },
+          { customerEmail: { contains: search, mode: "insensitive" } },
+          { customerName: { contains: search, mode: "insensitive" } },
+          { invoiceNumber: { contains: search, mode: "insensitive" } },
+        ],
+      })
     }
+
+    // Filter by status (handle OPEN specially to include WAITING and REVIEW)
+    const statusConditions: Prisma.DisputeWhereInput[] = []
+    const status = searchParams.get("status")
+    if (status) {
+      if (status.toUpperCase() === "OPEN") {
+        // Open includes: OPEN, WAITING_*, *_REVIEW
+        statusConditions.push({
+          OR: [
+            { disputeStatus: { equals: "OPEN", mode: "insensitive" } },
+            { disputeStatus: { contains: "WAITING", mode: "insensitive" } },
+            { disputeStatus: { contains: "REVIEW", mode: "insensitive" } },
+          ],
+        })
+      } else {
+        statusConditions.push({
+          disputeStatus: status,
+        })
+      }
+    }
+
+    // Combine all conditions with AND logic
+    const combinedConditions: Prisma.DisputeWhereInput[] = []
+    if (Object.keys(where).length > 0) {
+      combinedConditions.push(where)
+    }
+    if (searchConditions.length > 0) {
+      combinedConditions.push(...searchConditions)
+    }
+    if (statusConditions.length > 0) {
+      combinedConditions.push(...statusConditions)
+    }
+
+    // Build final where clause
+    const finalWhere: Prisma.DisputeWhereInput =
+      combinedConditions.length > 1
+        ? { AND: combinedConditions }
+        : combinedConditions[0] || {}
 
     // Get all disputes matching filters (for accurate stats)
     const disputes = await prisma.dispute.findMany({
-      where,
+      where: finalWhere,
       select: {
         disputeStatus: true,
         disputeOutcome: true,

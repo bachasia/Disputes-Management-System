@@ -254,22 +254,26 @@ export default function DisputeDetailPage() {
                 <FileText className="mr-2 h-4 w-4" />
                 Provide Evidence
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => setSendMessageOpen(true)}
-                disabled={dispute.disputeStatus === "RESOLVED"}
-              >
-                <MessageSquare className="mr-2 h-4 w-4" />
-                Send Message
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setMakeOfferOpen(true)}
-                disabled={dispute.disputeStatus === "RESOLVED"}
-              >
-                <Handshake className="mr-2 h-4 w-4" />
-                Make Offer
-              </Button>
+              {dispute.disputeType?.toUpperCase() === "INQUIRY" && (
+                <Button
+                  variant="outline"
+                  onClick={() => setSendMessageOpen(true)}
+                  disabled={dispute.disputeStatus === "RESOLVED"}
+                >
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  Send Message
+                </Button>
+              )}
+              {dispute.disputeType?.toUpperCase() === "INQUIRY" && (
+                <Button
+                  variant="outline"
+                  onClick={() => setMakeOfferOpen(true)}
+                  disabled={dispute.disputeStatus === "RESOLVED"}
+                >
+                  <Handshake className="mr-2 h-4 w-4" />
+                  Make Offer
+                </Button>
+              )}
               <Button
                 variant="outline"
                 onClick={() => setAiAssistantsOpen(true)}

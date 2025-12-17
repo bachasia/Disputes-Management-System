@@ -158,15 +158,6 @@ export interface ProvideEvidenceResponse {
   }>
 }
 
-export interface SendMessageRequest {
-  message: string
-  posted_by?: string
-  attachments?: Array<{
-    name: string
-    url: string
-  }>
-}
-
 export interface SendMessageResponse {
   dispute_id: string
   messages: Array<{
@@ -362,27 +353,31 @@ export class PayPalDisputesAPI {
   /**
    * Send message for a dispute
    * POST /v1/customer/disputes/{id}/send-message
+   * According to PayPal docs: https://docs.paypal.ai/reference/api/rest/disputes-actions/send-message-about-dispute-to-other-party
+   * Uses multipart/form-data with optional message_document file
+   * Note: Only works when dispute_life_cycle_stage is INQUIRY
    */
   async sendMessage(
     disputeId: string,
-    message: string,
-    postedBy?: string,
-    attachments?: Array<{ name: string; url: string }>
+    file?: File | Blob
   ): Promise<SendMessageResponse> {
-    const body: SendMessageRequest = {
-      message,
-    }
-    if (postedBy) {
-      body.posted_by = postedBy
-    }
-    if (attachments) {
-      body.attachments = attachments
+    // According to PayPal docs, send-message uses multipart/form-data
+    // with optional message_document file
+    const formData = new FormData()
+    
+    if (file) {
+      formData.append("message_document", file)
     }
 
     return this.client.request<SendMessageResponse>(
       "POST",
       `/v1/customer/disputes/${disputeId}/send-message`,
-      body
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
     )
   }
 

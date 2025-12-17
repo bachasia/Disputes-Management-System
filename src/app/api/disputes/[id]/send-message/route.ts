@@ -20,7 +20,6 @@ export async function POST(
     if (permissionError) return permissionError
 
     const { id } = params
-    const body = await request.json()
 
     // Get dispute with account
     const dispute = await prisma.dispute.findUnique({
@@ -44,6 +43,17 @@ export async function POST(
       )
     }
 
+    // Check if dispute is INQUIRY stage (required for send-message)
+    if (dispute.disputeType?.toUpperCase() !== "INQUIRY") {
+      return NextResponse.json(
+        {
+          error: "Bad Request",
+          message: "Send message is only available for disputes in INQUIRY stage",
+        },
+        { status: 400 }
+      )
+    }
+
     // Decrypt credentials
     const clientId = decrypt(dispute.paypalAccount.clientId)
     const secretKey = decrypt(dispute.paypalAccount.secretKey)
@@ -56,36 +66,25 @@ export async function POST(
     )
     const disputesAPI = new PayPalDisputesAPI(paypalClient)
 
-    // Send message via PayPal API
-    const response = await disputesAPI.sendMessage(
-      dispute.disputeId,
-      body.message,
-      body.posted_by,
-      body.attachments
-    )
+    // Parse FormData (according to PayPal docs, send-message uses multipart/form-data)
+    const formData = await request.formData()
+    const file = formData.get("message_document") as File | null
+    const note = formData.get("note") as string | null
 
-    // Save message to database
-    if (response.messages && response.messages.length > 0) {
-      const latestMessage = response.messages[response.messages.length - 1]
-      await prisma.disputeMessage.create({
-        data: {
-          disputeId: id,
-          messageType: latestMessage.posted_by || "SELLER",
-          postedBy: latestMessage.posted_by || null,
-          content: latestMessage.content || null,
-          attachments: latestMessage.attachments || undefined,
-          createdAt: new Date(latestMessage.time_posted),
-        },
-      })
-    }
+    // Send message via PayPal API (file is optional according to PayPal docs)
+    await disputesAPI.sendMessage(dispute.disputeId, file || undefined)
 
     // Create history record
     await prisma.disputeHistory.create({
       data: {
         disputeId: id,
         actionType: "MESSAGE_SENT",
-        actionBy: body.posted_by || "USER",
-        description: "Message sent",
+        actionBy: "USER",
+        description: note || `Message sent${file ? ` with document: ${file.name}` : ""}`,
+        metadata: {
+          hasDocument: !!file,
+          fileName: file?.name,
+        },
       },
     })
 
