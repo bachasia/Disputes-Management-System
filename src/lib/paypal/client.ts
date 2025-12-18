@@ -223,13 +223,16 @@ export class PayPalClient {
     })
 
     try {
+      // Convert Buffer to Uint8Array for fetch body
+      const bodyData = new Uint8Array(formBuffer)
+      
       const response = await fetch(`${this.baseURL}${endpoint}`, {
         method: "POST",
         headers: {
           ...formHeaders,
           Authorization: `Bearer ${token}`,
         },
-        body: formBuffer,
+        body: bodyData,
       })
 
       const responseData = await response.json()
