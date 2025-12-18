@@ -74,32 +74,38 @@ export async function POST(
       }
     }
 
-    // Determine evidence type based on what's being provided
-    const getEvidenceType = (fileName: string, hasTracking: boolean): string => {
-      const lowerName = fileName.toLowerCase()
-      if (hasTracking || lowerName.includes("tracking") || lowerName.includes("delivery")) {
-        return "PROOF_OF_FULFILLMENT"
+    // Extract tracking info from evidence array if provided
+    let trackingInfo: { carrier_name: string; tracking_number: string } | undefined
+    
+    for (const e of evidence) {
+      if (e.evidence_info?.tracking_info?.length > 0) {
+        const track = e.evidence_info.tracking_info[0]
+        if (track.carrier_name && track.tracking_number) {
+          trackingInfo = {
+            carrier_name: track.carrier_name,
+            tracking_number: track.tracking_number,
+          }
+          break
+        }
       }
-      if (lowerName.includes("refund")) {
-        return "PROOF_OF_REFUND"
+    }
+
+    // Determine evidence type
+    const getEvidenceType = (hasTracking: boolean): string => {
+      if (hasTracking) {
+        return "PROOF_OF_FULFILLMENT"
       }
       return "OTHER"
     }
 
-    const hasTrackingInfo = evidence.some(e => 
-      e.evidence_type === "PROOF_OF_FULFILLMENT" || 
-      e.evidence_info?.tracking_info?.length
-    )
+    const evidenceType = getEvidenceType(!!trackingInfo)
 
     // Provide evidence via PayPal API
     // Priority: If files are provided, use file upload method (multipart/form-data)
     // Otherwise, use JSON method for tracking info and notes
     if (files.length > 0) {
       // For each file, call PayPal API with multipart/form-data
-      // According to PayPal docs, each file should be sent separately
       for (const file of files) {
-        const evidenceType = getEvidenceType(file.name, hasTrackingInfo)
-        
         // Convert File to Buffer for Node.js form-data package
         const arrayBuffer = await file.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
@@ -108,15 +114,8 @@ export async function POST(
           dispute.disputeId,
           buffer,
           file.name,
-          evidenceType
-        )
-      }
-      
-      // If there's also tracking info or note, send them separately via JSON
-      if (evidence.length > 0 || note) {
-        await disputesAPI.provideEvidence(
-          dispute.disputeId,
-          evidence,
+          evidenceType,
+          trackingInfo,
           note
         )
       }

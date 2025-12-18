@@ -315,40 +315,63 @@ export class PayPalDisputesAPI {
   /**
    * Provide evidence with file upload (multipart/form-data)
    * POST /v1/customer/disputes/{id}/provide-evidence
-   * According to PayPal docs: https://docs.paypal.ai/reference/api/rest/disputes-actions/provide-evidence
    * 
-   * Requires both:
-   * - input: JSON string with evidence_type
-   * - evidence-file: The document file
+   * PayPal format (from community):
+   * - input: JSON with { evidences: [{ evidence_type, evidence_info, documents, notes }] }
+   * - file1, file2, ...: Document files
+   * 
+   * For PROOF_OF_FULFILLMENT: evidence_info.tracking_info is required
    */
   async provideEvidenceWithFile(
     disputeId: string,
     fileBuffer: Buffer,
     fileName: string,
-    evidenceType: string = "PROOF_OF_FULFILLMENT"
+    evidenceType: string = "PROOF_OF_FULFILLMENT",
+    trackingInfo?: { carrier_name: string; tracking_number: string },
+    notes?: string
   ): Promise<ProvideEvidenceResponse> {
     // Create FormData using form-data package (Node.js compatible)
     const formData = new FormData()
     
-    // Add input JSON with Content-Type: application/json
-    const inputData = {
+    // Build evidence object based on type
+    const evidence: any = {
       evidence_type: evidenceType,
-      documents: [{ name: fileName }]
+      documents: [{ name: fileName }],
     }
-    // Create a buffer from JSON string and append with contentType
+    
+    // For PROOF_OF_FULFILLMENT, add tracking info if provided
+    if (evidenceType === "PROOF_OF_FULFILLMENT" && trackingInfo) {
+      evidence.evidence_info = {
+        tracking_info: [{
+          carrier_name: trackingInfo.carrier_name,
+          tracking_number: trackingInfo.tracking_number,
+        }]
+      }
+    }
+    
+    if (notes) {
+      evidence.notes = notes
+    }
+    
+    // Root level must be object with "evidences" array
+    const inputData = {
+      evidences: [evidence]
+    }
+    
+    // Add input JSON with Content-Type: application/json
     const inputBuffer = Buffer.from(JSON.stringify(inputData), 'utf8')
     formData.append("input", inputBuffer, {
       contentType: "application/json",
     })
     
-    // Add the file
-    formData.append("evidence-file", fileBuffer, {
+    // Add the file as "file1" (PayPal expects file1, file2, etc.)
+    formData.append("file1", fileBuffer, {
       filename: fileName,
       contentType: this.getMimeType(fileName),
     })
 
     console.log(`[PayPalDisputesAPI] Uploading evidence file: ${fileName}, size: ${fileBuffer.length} bytes`)
-    console.log(`[PayPalDisputesAPI] Input data:`, inputData)
+    console.log(`[PayPalDisputesAPI] Input data:`, JSON.stringify(inputData, null, 2))
 
     return this.client.requestMultipart<ProvideEvidenceResponse>(
       `/v1/customer/disputes/${disputeId}/provide-evidence`,
