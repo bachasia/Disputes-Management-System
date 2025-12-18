@@ -346,8 +346,9 @@ export class PayPalDisputesAPI {
       documents: documents,
     }
     
-    // For PROOF_OF_FULFILLMENT, add tracking info (required for INR disputes)
-    if (evidenceType === "PROOF_OF_FULFILLMENT" && trackingInfo) {
+    // Add tracking info if provided (for any evidence type)
+    // PayPal may use this to update tracking status
+    if (trackingInfo) {
       evidence.evidence_info = {
         tracking_info: [{
           carrier_name: trackingInfo.carrier_name,
@@ -356,8 +357,15 @@ export class PayPalDisputesAPI {
       }
     }
     
+    // Add notes - include tracking info in notes as well for visibility
     if (notes) {
-      evidence.notes = notes
+      let fullNotes = notes
+      if (trackingInfo) {
+        fullNotes = `Tracking: ${trackingInfo.carrier_name} - ${trackingInfo.tracking_number}\n\n${notes}`
+      }
+      evidence.notes = fullNotes
+    } else if (trackingInfo) {
+      evidence.notes = `Tracking: ${trackingInfo.carrier_name} - ${trackingInfo.tracking_number}`
     }
     
     // Root level must be object with "evidences" array
