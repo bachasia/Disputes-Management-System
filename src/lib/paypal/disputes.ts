@@ -140,9 +140,11 @@ export interface EvidenceItem {
     refund_ids?: string[]
     notes?: string
   }
+  // When uploading files, only 'name' is required (must match multipart filename)
+  // When referencing existing docs, 'url' is used
   documents?: Array<{
     name: string
-    url: string
+    url?: string
   }>
 }
 
@@ -282,6 +284,12 @@ export class PayPalDisputesAPI {
   /**
    * Provide evidence with file uploads for a dispute
    * POST /v1/customer/disputes/{id}/provide-evidence (multipart/form-data)
+   * 
+   * IMPORTANT: 
+   * - Only call this API ONCE per dispute submission
+   * - All documents must be listed in documents[] array of input JSON
+   * - All file binaries must be attached in the same multipart request
+   * - Filename in documents[].name MUST match filename in multipart parts
    */
   async provideEvidenceWithFiles(
     disputeId: string,
@@ -298,11 +306,36 @@ export class PayPalDisputesAPI {
     const boundary = `----FormBoundary${Date.now()}`
     const parts: Buffer[] = []
 
+    // IMPORTANT: Add documents array to evidence with filenames matching multipart parts
+    // Each evidence item should reference the uploaded files
+    const evidenceWithDocs = evidence.map((item, index) => {
+      // If this is the first evidence item, attach all documents to it
+      if (index === 0 && files.length > 0) {
+        return {
+          ...item,
+          documents: files.map(f => ({ name: f.filename })),
+        }
+      }
+      return item
+    })
+
+    // If no evidence items but we have files, create one with documents
+    const finalEvidence = evidenceWithDocs.length > 0 
+      ? evidenceWithDocs 
+      : files.length > 0 
+        ? [{ 
+            evidence_type: "OTHER",
+            documents: files.map(f => ({ name: f.filename })),
+          }]
+        : []
+
     // Add input JSON part
-    const inputData: ProvideEvidenceRequest = { evidence }
+    const inputData: ProvideEvidenceRequest = { evidence: finalEvidence }
     if (note) {
       inputData.note = note
     }
+
+    console.log("[PayPal] Provide evidence input:", JSON.stringify(inputData, null, 2))
 
     parts.push(Buffer.from(
       `--${boundary}\r\n` +
@@ -311,7 +344,8 @@ export class PayPalDisputesAPI {
       `${JSON.stringify(inputData)}\r\n`
     ))
 
-    // Add file parts
+    // Add ALL file parts in the SAME request
+    // Filename MUST match documents[].name in the input JSON
     for (const file of files) {
       parts.push(Buffer.from(
         `--${boundary}\r\n` +
@@ -326,6 +360,8 @@ export class PayPalDisputesAPI {
     parts.push(Buffer.from(`--${boundary}--\r\n`))
 
     const body = Buffer.concat(parts)
+
+    console.log(`[PayPal] Uploading ${files.length} files to provide-evidence API`)
 
     const response = await fetch(
       `${baseURL}/v1/customer/disputes/${disputeId}/provide-evidence`,
