@@ -202,55 +202,63 @@ export class PayPalClient {
 
   /**
    * Make a multipart/form-data request to PayPal API
-   * Uses form-data package for proper Node.js support
+   * Uses native fetch with form-data package for proper Node.js support
    */
   async requestMultipart<T = any>(
     endpoint: string,
     formData: FormData
   ): Promise<T> {
     const token = await this.getAccessToken()
-    const headers = formData.getHeaders()
 
     console.log(`[PayPalClient] POST ${endpoint} (multipart)`)
+
+    // Get the form data as buffer and headers
+    const formBuffer = formData.getBuffer()
+    const formHeaders = formData.getHeaders()
+
+    console.log(`[PayPalClient] Form buffer size: ${formBuffer.length}`)
     console.log(`[PayPalClient] Headers:`, {
-      ...headers,
+      ...formHeaders,
       Authorization: `Bearer ${token.substring(0, 20)}...`,
     })
 
     try {
-      const response = await axios.post<T>(
-        `${this.baseURL}${endpoint}`,
-        formData,
-        {
-          headers: {
-            ...headers,
-            Authorization: `Bearer ${token}`,
-          },
-          maxBodyLength: Infinity,
-          maxContentLength: Infinity,
-        }
-      )
-      console.log(`[PayPalClient] Success response:`, response.status)
-      return response.data
-    } catch (error: any) {
-      if (error.response) {
+      const response = await fetch(`${this.baseURL}${endpoint}`, {
+        method: "POST",
+        headers: {
+          ...formHeaders,
+          Authorization: `Bearer ${token}`,
+        },
+        body: formBuffer,
+      })
+
+      const responseData = await response.json()
+
+      if (!response.ok) {
         console.error(`[PayPalClient] Multipart Error response:`, {
-          status: error.response.status,
-          data: JSON.stringify(error.response.data, null, 2),
+          status: response.status,
+          data: JSON.stringify(responseData, null, 2),
           url: endpoint,
-          requestHeaders: error.config?.headers,
         })
 
-        if (error.response.data?.details) {
-          console.error(`[PayPalClient] Error details:`, error.response.data.details)
+        if (responseData?.details) {
+          console.error(`[PayPalClient] Error details:`, responseData.details)
         }
 
         throw new PayPalAPIError(
-          error.response.data?.message || "PayPal API Error",
-          error.response.status,
-          error.response.data
+          responseData?.message || "PayPal API Error",
+          response.status,
+          responseData
         )
       }
+
+      console.log(`[PayPalClient] Success response:`, response.status)
+      return responseData as T
+    } catch (error: any) {
+      if (error instanceof PayPalAPIError) {
+        throw error
+      }
+      console.error(`[PayPalClient] Request error:`, error)
       throw error
     }
   }
