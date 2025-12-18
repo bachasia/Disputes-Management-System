@@ -62,20 +62,25 @@ interface DisputesTableProps {
 
 
 /**
- * Format amount with currency
+ * Format amount with currency code displayed
+ * Returns: { amount: "100.00", currency: "USD" }
  */
-function formatAmount(amount: number | null, currency: string | null) {
-  if (!amount && amount !== 0) return "-"
-  const currencyCode = currency || "USD"
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currencyCode,
-    }).format(amount)
-  } catch (error) {
-    // Fallback if currency code is invalid
-    return `${currencyCode} ${amount.toFixed(2)}`
+function formatAmountWithCurrency(amount: number | null, currency: string | null): { 
+  amount: string
+  currency: string 
+} {
+  if (!amount && amount !== 0) {
+    return { amount: "-", currency: "" }
   }
+  const currencyCode = currency || "USD"
+  
+  // Format number without currency symbol
+  const formattedAmount = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount)
+  
+  return { amount: formattedAmount, currency: currencyCode }
 }
 
 /**
@@ -305,8 +310,18 @@ export function DisputesTable({ accountId, filters }: DisputesTableProps) {
                       {dispute.customerEmail || dispute.customerName || "N/A"}
                     </div>
                   </TableCell>
-                  <TableCell className="text-right font-bold">
-                    {formatAmount(dispute.disputeAmount, dispute.disputeCurrency)}
+                  <TableCell className="text-right">
+                    {(() => {
+                      const { amount, currency } = formatAmountWithCurrency(
+                        dispute.disputeAmount, 
+                        dispute.disputeCurrency
+                      )
+                      return (
+                        <span className="text-xs font-medium whitespace-nowrap">
+                          {amount} {currency}
+                        </span>
+                      )
+                    })()}
                   </TableCell>
                 </TableRow>
               ))}
