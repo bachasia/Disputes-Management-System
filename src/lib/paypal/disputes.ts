@@ -316,19 +316,20 @@ export class PayPalDisputesAPI {
    * Provide evidence with file upload (multipart/form-data)
    * POST /v1/customer/disputes/{id}/provide-evidence
    * 
+   * IMPORTANT: All files must be uploaded in a SINGLE request!
+   * After first submission, dispute state changes and no more evidence can be added.
+   * 
    * PayPal format:
    * - input: JSON with { evidences: [{ evidence_type, evidence_info, documents, notes }] }
-   * - file1, file2, ...: Document files
+   * - file1, file2, ...: Document files (names must match documents[].name)
    * 
    * Evidence types:
    * - PROOF_OF_FULFILLMENT: Only for "Item Not Received" disputes, requires tracking_info
    * - OTHER: For general evidence, works with all dispute types
-   * - PROOF_OF_REFUND, PROOF_OF_DELIVERY_SIGNATURE, etc.
    */
-  async provideEvidenceWithFile(
+  async provideEvidenceWithFiles(
     disputeId: string,
-    fileBuffer: Buffer,
-    fileName: string,
+    files: Array<{ buffer: Buffer; name: string }>,
     evidenceType: string = "OTHER",
     trackingInfo?: { carrier_name: string; tracking_number: string },
     notes?: string
@@ -336,10 +337,13 @@ export class PayPalDisputesAPI {
     // Create FormData using form-data package (Node.js compatible)
     const formData = new FormData()
     
+    // Build documents array from all files
+    const documents = files.map(f => ({ name: f.name }))
+    
     // Build evidence object based on type
     const evidence: any = {
       evidence_type: evidenceType,
-      documents: [{ name: fileName }],
+      documents: documents,
     }
     
     // For PROOF_OF_FULFILLMENT, add tracking info (required for INR disputes)
@@ -367,13 +371,16 @@ export class PayPalDisputesAPI {
       contentType: "application/json",
     })
     
-    // Add the file as "file1" (PayPal expects file1, file2, etc.)
-    formData.append("file1", fileBuffer, {
-      filename: fileName,
-      contentType: this.getMimeType(fileName),
+    // Add all files as file1, file2, etc. (PayPal expects this naming)
+    files.forEach((file, index) => {
+      formData.append(`file${index + 1}`, file.buffer, {
+        filename: file.name,
+        contentType: this.getMimeType(file.name),
+      })
     })
 
-    console.log(`[PayPalDisputesAPI] Uploading evidence file: ${fileName}, size: ${fileBuffer.length} bytes`)
+    console.log(`[PayPalDisputesAPI] Uploading ${files.length} evidence file(s)`)
+    console.log(`[PayPalDisputesAPI] Files:`, files.map(f => `${f.name} (${f.buffer.length} bytes)`).join(', '))
     console.log(`[PayPalDisputesAPI] Evidence type: ${evidenceType}`)
     console.log(`[PayPalDisputesAPI] Input data:`, JSON.stringify(inputData, null, 2))
 

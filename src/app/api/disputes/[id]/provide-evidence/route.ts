@@ -109,24 +109,26 @@ export async function POST(
     console.log(`[ProvideEvidence] Dispute reason: ${dispute.disputeReason}, Evidence type: ${evidenceType}`)
 
     // Provide evidence via PayPal API
-    // Priority: If files are provided, use file upload method (multipart/form-data)
-    // Otherwise, use JSON method for tracking info and notes
+    // IMPORTANT: All files must be uploaded in ONE request!
+    // After first submission, dispute state changes and no more evidence can be added.
     if (files.length > 0) {
-      // For each file, call PayPal API with multipart/form-data
+      // Convert all Files to Buffers
+      const fileBuffers: Array<{ buffer: Buffer; name: string }> = []
+      
       for (const file of files) {
-        // Convert File to Buffer for Node.js form-data package
         const arrayBuffer = await file.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
-        
-        await disputesAPI.provideEvidenceWithFile(
-          dispute.disputeId,
-          buffer,
-          file.name,
-          evidenceType,
-          trackingInfo,
-          note
-        )
+        fileBuffers.push({ buffer, name: file.name })
       }
+      
+      // Upload ALL files in ONE request
+      await disputesAPI.provideEvidenceWithFiles(
+        dispute.disputeId,
+        fileBuffers,
+        evidenceType,
+        trackingInfo,
+        note
+      )
     } else if (evidence.length > 0) {
       // Only JSON method if no files
       await disputesAPI.provideEvidence(
