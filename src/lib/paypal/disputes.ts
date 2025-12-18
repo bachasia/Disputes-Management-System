@@ -115,8 +115,29 @@ export interface ListDisputesParams {
   // Note: PayPal API doesn't support 'page' parameter, use pagination links instead
 }
 
+// Accept claim reason types
+export type AcceptClaimReason = 
+  | "POLICY" 
+  | "DID_NOT_SHIP" 
+  | "TOO_TIME_CONSUMING" 
+  | "CANNOT_PROVIDE_EVIDENCE"
+
+// Display names for accept claim reasons
+export const ACCEPT_CLAIM_REASON_DISPLAY: Record<AcceptClaimReason, string> = {
+  POLICY: "Policy compliance",
+  DID_NOT_SHIP: "Item was not shipped",
+  TOO_TIME_CONSUMING: "Too time consuming to dispute",
+  CANNOT_PROVIDE_EVIDENCE: "Cannot provide evidence",
+}
+
 export interface AcceptClaimRequest {
   note?: string
+  accept_claim_reason?: AcceptClaimReason
+  refund_amount?: {
+    currency_code: string
+    value: string
+  }
+  invoice_id?: string
 }
 
 export interface AcceptClaimResponse {
@@ -239,16 +260,34 @@ export class PayPalDisputesAPI {
   }
 
   /**
-   * Accept claim for a dispute
+   * Accept claim for a dispute (Full Refund)
    * POST /v1/customer/disputes/{id}/accept-claim
    */
   async acceptClaim(
     disputeId: string,
-    note?: string
+    options?: {
+      note?: string
+      acceptClaimReason?: AcceptClaimReason
+      refundAmount?: { currencyCode: string; value: string }
+      invoiceId?: string
+    }
   ): Promise<AcceptClaimResponse> {
     const body: AcceptClaimRequest = {}
-    if (note) {
-      body.note = note
+    
+    if (options?.note) {
+      body.note = options.note
+    }
+    if (options?.acceptClaimReason) {
+      body.accept_claim_reason = options.acceptClaimReason
+    }
+    if (options?.refundAmount) {
+      body.refund_amount = {
+        currency_code: options.refundAmount.currencyCode,
+        value: options.refundAmount.value,
+      }
+    }
+    if (options?.invoiceId) {
+      body.invoice_id = options.invoiceId
     }
 
     return this.client.request<AcceptClaimResponse>(

@@ -56,8 +56,16 @@ export async function POST(
     )
     const disputesAPI = new PayPalDisputesAPI(paypalClient)
 
-    // Accept claim via PayPal API
-    await disputesAPI.acceptClaim(dispute.disputeId, body.note)
+    // Accept claim (Full Refund) via PayPal API
+    await disputesAPI.acceptClaim(dispute.disputeId, {
+      note: body.note,
+      acceptClaimReason: body.acceptClaimReason,
+      refundAmount: body.refundAmount ? {
+        currencyCode: body.refundAmount.currencyCode,
+        value: body.refundAmount.value,
+      } : undefined,
+      invoiceId: body.invoiceId,
+    })
 
     // Update dispute status
     await prisma.dispute.update({
@@ -72,11 +80,15 @@ export async function POST(
     await prisma.disputeHistory.create({
       data: {
         disputeId: id,
-        actionType: "CLAIM_ACCEPTED",
+        actionType: "FULL_REFUND",
         actionBy: "USER",
         oldValue: dispute.disputeStatus || "",
         newValue: "RESOLVED",
-        description: body.note || "Claim accepted",
+        description: body.note || "Full refund issued",
+        metadata: {
+          reason: body.acceptClaimReason,
+          refundAmount: body.refundAmount,
+        },
       },
     })
 

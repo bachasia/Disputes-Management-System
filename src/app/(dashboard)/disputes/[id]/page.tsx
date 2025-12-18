@@ -25,7 +25,7 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2 } from "lucide-react"
 import { StatusBadge } from "@/components/disputes/StatusBadge"
 import { ReasonBadge } from "@/components/disputes/ReasonBadge"
-import { AcceptClaimModal } from "@/components/disputes/AcceptClaimModal"
+import { FullRefundModal } from "@/components/disputes/AcceptClaimModal"
 import { ProvideEvidenceModal } from "@/components/disputes/ProvideEvidenceModal"
 import { SendMessageModal } from "@/components/disputes/SendMessageModal"
 import { AIAssistantsModal } from "@/components/disputes/AIAssistantsModal"
@@ -234,7 +234,7 @@ export default function DisputeDetailPage() {
                 disabled={dispute.disputeStatus === "RESOLVED"}
               >
                 <CheckCircle2 className="mr-2 h-4 w-4" />
-                Accept Claim
+                Full Refund
               </Button>
               <Button
                 variant="outline"
@@ -573,10 +573,12 @@ export default function DisputeDetailPage() {
       )}
 
       {/* Modals */}
-      <AcceptClaimModal
+      <FullRefundModal
         open={acceptClaimOpen}
         onOpenChange={setAcceptClaimOpen}
         disputeId={dispute.id}
+        disputeAmount={dispute.disputeAmount}
+        disputeCurrency={dispute.disputeCurrency}
         onSuccess={fetchDisputeDetail}
       />
       <ProvideEvidenceModal
