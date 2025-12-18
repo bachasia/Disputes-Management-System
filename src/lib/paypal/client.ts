@@ -221,6 +221,10 @@ export class PayPalClient {
       ...formHeaders,
       Authorization: `Bearer ${token.substring(0, 20)}...`,
     })
+    
+    // Debug: Log first 500 chars of form body to see structure
+    const bodyPreview = formBuffer.toString('utf8', 0, Math.min(500, formBuffer.length))
+    console.log(`[PayPalClient] Body preview:`, bodyPreview)
 
     try {
       // Convert Buffer to Uint8Array for fetch body
