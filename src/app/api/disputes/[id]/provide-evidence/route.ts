@@ -74,6 +74,23 @@ export async function POST(
       }
     }
 
+    // Determine evidence type based on what's being provided
+    const getEvidenceType = (fileName: string, hasTracking: boolean): string => {
+      const lowerName = fileName.toLowerCase()
+      if (hasTracking || lowerName.includes("tracking") || lowerName.includes("delivery")) {
+        return "PROOF_OF_FULFILLMENT"
+      }
+      if (lowerName.includes("refund")) {
+        return "PROOF_OF_REFUND"
+      }
+      return "OTHER"
+    }
+
+    const hasTrackingInfo = evidence.some(e => 
+      e.evidence_type === "PROOF_OF_FULFILLMENT" || 
+      e.evidence_info?.tracking_info?.length
+    )
+
     // Provide evidence via PayPal API
     // Priority: If files are provided, use file upload method (multipart/form-data)
     // Otherwise, use JSON method for tracking info and notes
@@ -81,9 +98,11 @@ export async function POST(
       // For each file, call PayPal API with multipart/form-data
       // According to PayPal docs, each file should be sent separately
       for (const file of files) {
+        const evidenceType = getEvidenceType(file.name, hasTrackingInfo)
         await disputesAPI.provideEvidenceWithFile(
           dispute.disputeId,
-          file
+          file,
+          evidenceType
         )
       }
       

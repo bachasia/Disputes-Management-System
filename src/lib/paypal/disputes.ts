@@ -272,34 +272,17 @@ export class PayPalDisputesAPI {
   ): Promise<AcceptClaimResponse> {
     // According to PayPal docs, accept-claim uses multipart/form-data
     // with optional accept-claim-document file
+    const formData = new FormData()
+    
     if (file) {
-      const formData = new FormData()
       formData.append("accept-claim-document", file)
-
-      return this.client.request<AcceptClaimResponse>(
-        "POST",
-        `/v1/customer/disputes/${disputeId}/accept-claim`,
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      )
-    } else {
-      // If no file, send empty FormData
-      const formData = new FormData()
-      return this.client.request<AcceptClaimResponse>(
-        "POST",
-        `/v1/customer/disputes/${disputeId}/accept-claim`,
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      )
     }
+
+    return this.client.request<AcceptClaimResponse>(
+      "POST",
+      `/v1/customer/disputes/${disputeId}/accept-claim`,
+      formData
+    )
   }
 
   /**
@@ -329,24 +312,40 @@ export class PayPalDisputesAPI {
    * Provide evidence with file upload (multipart/form-data)
    * POST /v1/customer/disputes/{id}/provide-evidence
    * According to PayPal docs: https://docs.paypal.ai/reference/api/rest/disputes-actions/provide-evidence
+   * 
+   * PayPal requires both:
+   * - input: JSON part with evidence info
+   * - evidence-file: The document file
    */
   async provideEvidenceWithFile(
     disputeId: string,
-    file: File | Blob
+    file: File | Blob,
+    evidenceType: string = "PROOF_OF_FULFILLMENT"
   ): Promise<ProvideEvidenceResponse> {
     // Create FormData for multipart/form-data
     const formData = new FormData()
+    
+    // PayPal requires 'input' JSON part with evidence info
+    const inputJson = JSON.stringify({
+      evidence: [{
+        evidence_type: evidenceType,
+        documents: [{
+          name: file instanceof File ? file.name : "document"
+        }]
+      }]
+    })
+    
+    // Append input as JSON with proper content type
+    const inputBlob = new Blob([inputJson], { type: "application/json" })
+    formData.append("input", inputBlob)
+    
+    // Append the file
     formData.append("evidence-file", file)
 
     return this.client.request<ProvideEvidenceResponse>(
       "POST",
       `/v1/customer/disputes/${disputeId}/provide-evidence`,
-      formData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      }
+      formData
     )
   }
 
@@ -372,12 +371,7 @@ export class PayPalDisputesAPI {
     return this.client.request<SendMessageResponse>(
       "POST",
       `/v1/customer/disputes/${disputeId}/send-message`,
-      formData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      }
+      formData
     )
   }
 

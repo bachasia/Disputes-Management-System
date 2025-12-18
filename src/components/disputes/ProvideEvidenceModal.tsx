@@ -131,15 +131,15 @@ export function ProvideEvidenceModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Provide Evidence</DialogTitle>
           <DialogDescription>
             Submit evidence to support your case in this dispute.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-4 py-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="space-y-4 py-4 overflow-y-auto flex-1">
             <div className="space-y-2">
               <Label htmlFor="carrier">Carrier Name</Label>
               <Input
@@ -191,7 +191,7 @@ export function ProvideEvidenceModal({
                   Supported formats: PDF, JPG, PNG, DOC, DOCX
                 </p>
                 {files.length > 0 && (
-                  <div className="space-y-2 mt-2">
+                  <div className="space-y-2 mt-2 max-h-[200px] overflow-y-auto pr-1">
                     {files.map((file, index) => (
                       <div
                         key={index}
