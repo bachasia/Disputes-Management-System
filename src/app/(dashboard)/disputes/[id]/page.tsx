@@ -18,7 +18,6 @@ import {
   CheckCircle,
   XCircle,
   Sparkles,
-  Handshake,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -26,12 +25,10 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2 } from "lucide-react"
 import { StatusBadge } from "@/components/disputes/StatusBadge"
 import { ReasonBadge } from "@/components/disputes/ReasonBadge"
-import { OutcomeBadge } from "@/components/disputes/OutcomeBadge"
 import { AcceptClaimModal } from "@/components/disputes/AcceptClaimModal"
 import { ProvideEvidenceModal } from "@/components/disputes/ProvideEvidenceModal"
 import { SendMessageModal } from "@/components/disputes/SendMessageModal"
 import { AIAssistantsModal } from "@/components/disputes/AIAssistantsModal"
-import { MakeOfferModal } from "@/components/disputes/MakeOfferModal"
 
 interface DisputeDetail {
   id: string
@@ -45,7 +42,6 @@ interface DisputeDetail {
   disputeType: string | null
   disputeReason: string | null
   disputeStatus: string | null
-  disputeOutcome: string | null
   disputeCreateTime: Date | null
   disputeUpdateTime: Date | null
   responseDueDate: Date | null
@@ -90,7 +86,6 @@ export default function DisputeDetailPage() {
   const [provideEvidenceOpen, setProvideEvidenceOpen] = React.useState(false)
   const [sendMessageOpen, setSendMessageOpen] = React.useState(false)
   const [aiAssistantsOpen, setAiAssistantsOpen] = React.useState(false)
-  const [makeOfferOpen, setMakeOfferOpen] = React.useState(false)
 
   const fetchDisputeDetail = React.useCallback(async () => {
     setLoading(true)
@@ -214,11 +209,6 @@ export default function DisputeDetailPage() {
               </div>
               <div className="flex items-center gap-3">
                 <StatusBadge status={dispute.disputeStatus} />
-                <OutcomeBadge 
-                  outcome={dispute.disputeOutcome} 
-                  rawData={dispute.rawData}
-                  disputeStatus={dispute.disputeStatus}
-                />
                 <ReasonBadge reason={dispute.disputeReason} />
               </div>
               <div className="text-sm text-muted-foreground">
@@ -254,26 +244,14 @@ export default function DisputeDetailPage() {
                 <FileText className="mr-2 h-4 w-4" />
                 Provide Evidence
               </Button>
-              {dispute.disputeType?.toUpperCase() === "INQUIRY" && (
-                <Button
-                  variant="outline"
-                  onClick={() => setSendMessageOpen(true)}
-                  disabled={dispute.disputeStatus === "RESOLVED"}
-                >
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  Send Message
-                </Button>
-              )}
-              {dispute.disputeType?.toUpperCase() === "INQUIRY" && (
-                <Button
-                  variant="outline"
-                  onClick={() => setMakeOfferOpen(true)}
-                  disabled={dispute.disputeStatus === "RESOLVED"}
-                >
-                  <Handshake className="mr-2 h-4 w-4" />
-                  Make Offer
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                onClick={() => setSendMessageOpen(true)}
+                disabled={dispute.disputeStatus === "RESOLVED"}
+              >
+                <MessageSquare className="mr-2 h-4 w-4" />
+                Send Message
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => setAiAssistantsOpen(true)}
@@ -605,6 +583,7 @@ export default function DisputeDetailPage() {
         open={provideEvidenceOpen}
         onOpenChange={setProvideEvidenceOpen}
         disputeId={dispute.id}
+        transactionId={dispute.transactionId}
         onSuccess={fetchDisputeDetail}
       />
       <SendMessageModal
@@ -623,14 +602,6 @@ export default function DisputeDetailPage() {
           disputeReason: dispute.disputeReason,
           rawData: dispute.rawData,
         }}
-        onSuccess={fetchDisputeDetail}
-      />
-      <MakeOfferModal
-        open={makeOfferOpen}
-        onOpenChange={setMakeOfferOpen}
-        disputeId={dispute.id}
-        disputeAmount={dispute.disputeAmount}
-        disputeCurrency={dispute.disputeCurrency}
         onSuccess={fetchDisputeDetail}
       />
     </div>

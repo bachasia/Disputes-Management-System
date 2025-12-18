@@ -51,6 +51,11 @@ export async function GET(request: NextRequest) {
       where.paypalAccountId = params.account_id
     }
 
+    // Filter by status
+    if (params.status) {
+      where.disputeStatus = params.status
+    }
+
     // Filter by dispute_type
     if (params.dispute_type) {
       where.disputeType = params.dispute_type
@@ -71,55 +76,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Search filter (search in dispute_id, transaction_id, customer_email, customer_name, invoice_number)
-    const searchConditions: Prisma.DisputeWhereInput[] = []
     if (params.search) {
-      searchConditions.push({
-        OR: [
-          { disputeId: { contains: params.search, mode: "insensitive" } },
-          { transactionId: { contains: params.search, mode: "insensitive" } },
-          { customerEmail: { contains: params.search, mode: "insensitive" } },
-          { customerName: { contains: params.search, mode: "insensitive" } },
-          { invoiceNumber: { contains: params.search, mode: "insensitive" } },
-        ],
-      })
+      where.OR = [
+        { disputeId: { contains: params.search, mode: "insensitive" } },
+        { transactionId: { contains: params.search, mode: "insensitive" } },
+        { customerEmail: { contains: params.search, mode: "insensitive" } },
+        { customerName: { contains: params.search, mode: "insensitive" } },
+        { invoiceNumber: { contains: params.search, mode: "insensitive" } },
+      ]
     }
-
-    // Filter by status (handle OPEN specially to include WAITING and REVIEW)
-    const statusConditions: Prisma.DisputeWhereInput[] = []
-    if (params.status) {
-      if (params.status.toUpperCase() === "OPEN") {
-        // Open includes: OPEN, WAITING_*, *_REVIEW
-        statusConditions.push({
-          OR: [
-            { disputeStatus: { equals: "OPEN", mode: "insensitive" } },
-            { disputeStatus: { contains: "WAITING", mode: "insensitive" } },
-            { disputeStatus: { contains: "REVIEW", mode: "insensitive" } },
-          ],
-        })
-      } else {
-        statusConditions.push({
-          disputeStatus: params.status,
-        })
-      }
-    }
-
-    // Combine all conditions with AND logic
-    const combinedConditions: Prisma.DisputeWhereInput[] = []
-    if (Object.keys(where).length > 0) {
-      combinedConditions.push(where)
-    }
-    if (searchConditions.length > 0) {
-      combinedConditions.push(...searchConditions)
-    }
-    if (statusConditions.length > 0) {
-      combinedConditions.push(...statusConditions)
-    }
-
-    // Build final where clause
-    const finalWhere: Prisma.DisputeWhereInput =
-      combinedConditions.length > 1
-        ? { AND: combinedConditions }
-        : combinedConditions[0] || {}
 
     // Pagination
     const page = parseInt(params.page || "1", 10)
@@ -127,11 +92,11 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit
 
     // Get total count
-    const total = await prisma.dispute.count({ where: finalWhere })
+    const total = await prisma.dispute.count({ where })
 
     // Get disputes with pagination
     const disputes = await prisma.dispute.findMany({
-      where: finalWhere,
+      where,
       include: {
         paypalAccount: {
           select: {

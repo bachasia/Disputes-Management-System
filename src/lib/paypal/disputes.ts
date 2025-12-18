@@ -1,5 +1,4 @@
 import { PayPalClient, PayPalAPIError } from "./client"
-import FormData from "form-data"
 
 /**
  * PayPal Disputes API Response Types
@@ -116,6 +115,10 @@ export interface ListDisputesParams {
   // Note: PayPal API doesn't support 'page' parameter, use pagination links instead
 }
 
+export interface AcceptClaimRequest {
+  note?: string
+}
+
 export interface AcceptClaimResponse {
   dispute_id: string
   status: string
@@ -159,6 +162,15 @@ export interface ProvideEvidenceResponse {
   }>
 }
 
+export interface SendMessageRequest {
+  message: string
+  posted_by?: string
+  attachments?: Array<{
+    name: string
+    url: string
+  }>
+}
+
 export interface SendMessageResponse {
   dispute_id: string
   messages: Array<{
@@ -170,43 +182,6 @@ export interface SendMessageResponse {
       url: string
     }>
   }>
-  links?: Array<{
-    href: string
-    rel: string
-    method: string
-  }>
-}
-
-export interface MakeOfferRequest {
-  note: string
-  offer_type: "REFUND" | "REFUND_WITH_RETURN" | "REFUND_WITH_REPLACEMENT" | "REPLACEMENT_WITHOUT_REFUND"
-  offer_amount: {
-    currency_code: string
-    value: string
-  }
-  return_shipping_address?: {
-    country_code: string
-    address_line_1?: string
-    address_line_2?: string
-    address_line_3?: string
-    admin_area_4?: string
-    admin_area_3?: string
-    admin_area_2?: string
-    admin_area_1?: string
-    postal_code?: string
-    address_details?: {
-      street_number?: string
-      street_name?: string
-      street_type?: string
-      delivery_service?: string
-      building_name?: string
-      sub_building?: string
-    }
-  }
-  invoice_id?: string
-}
-
-export interface MakeOfferResponse {
   links?: Array<{
     href: string
     rel: string
@@ -264,28 +239,20 @@ export class PayPalDisputesAPI {
   /**
    * Accept claim for a dispute
    * POST /v1/customer/disputes/{id}/accept-claim
-   * According to PayPal docs: https://docs.paypal.ai/reference/api/rest/disputes-actions/accept-claim
-   * Uses multipart/form-data with optional accept-claim-document file
    */
   async acceptClaim(
     disputeId: string,
-    fileBuffer?: Buffer,
-    fileName?: string
+    note?: string
   ): Promise<AcceptClaimResponse> {
-    // According to PayPal docs, accept-claim uses multipart/form-data
-    // with optional accept-claim-document file
-    const formData = new FormData()
-    
-    if (fileBuffer && fileName) {
-      formData.append("accept-claim-document", fileBuffer, {
-        filename: fileName,
-        contentType: this.getMimeType(fileName),
-      })
+    const body: AcceptClaimRequest = {}
+    if (note) {
+      body.note = note
     }
 
-    return this.client.requestMultipart<AcceptClaimResponse>(
+    return this.client.request<AcceptClaimResponse>(
+      "POST",
       `/v1/customer/disputes/${disputeId}/accept-claim`,
-      formData
+      body
     )
   }
 
@@ -313,151 +280,29 @@ export class PayPalDisputesAPI {
   }
 
   /**
-   * Provide evidence with file upload (multipart/form-data)
-   * POST /v1/customer/disputes/{id}/provide-evidence
-   * 
-   * IMPORTANT: All files must be uploaded in a SINGLE request!
-   * After first submission, dispute state changes and no more evidence can be added.
-   * 
-   * PayPal format:
-   * - input: JSON with { evidences: [{ evidence_type, evidence_info, documents, notes }] }
-   * - file1, file2, ...: Document files (names must match documents[].name)
-   * 
-   * Evidence types:
-   * - PROOF_OF_FULFILLMENT: Only for "Item Not Received" disputes, requires tracking_info
-   * - OTHER: For general evidence, works with all dispute types
-   */
-  async provideEvidenceWithFiles(
-    disputeId: string,
-    files: Array<{ buffer: Buffer; name: string }>,
-    evidenceType: string = "OTHER",
-    trackingInfo?: { carrier_name: string; tracking_number: string },
-    notes?: string
-  ): Promise<ProvideEvidenceResponse> {
-    // Create FormData using form-data package (Node.js compatible)
-    const formData = new FormData()
-    
-    // Build documents array from all files
-    const documents = files.map(f => ({ name: f.name }))
-    
-    // Build evidence object based on type
-    const evidence: any = {
-      evidence_type: evidenceType,
-      documents: documents,
-    }
-    
-    // Add tracking info if provided (for any evidence type)
-    // PayPal may use this to update tracking status
-    if (trackingInfo) {
-      evidence.evidence_info = {
-        tracking_info: [{
-          carrier_name: trackingInfo.carrier_name,
-          tracking_number: trackingInfo.tracking_number,
-        }]
-      }
-    }
-    
-    // Add notes - include tracking info in notes as well for visibility
-    if (notes) {
-      let fullNotes = notes
-      if (trackingInfo) {
-        fullNotes = `Tracking: ${trackingInfo.carrier_name} - ${trackingInfo.tracking_number}\n\n${notes}`
-      }
-      evidence.notes = fullNotes
-    } else if (trackingInfo) {
-      evidence.notes = `Tracking: ${trackingInfo.carrier_name} - ${trackingInfo.tracking_number}`
-    }
-    
-    // Root level must be object with "evidences" array
-    const inputData = {
-      evidences: [evidence]
-    }
-    
-    // Add input JSON with Content-Type: application/json
-    const inputBuffer = Buffer.from(JSON.stringify(inputData), 'utf8')
-    formData.append("input", inputBuffer, {
-      contentType: "application/json",
-    })
-    
-    // Add all files as file1, file2, etc. (PayPal expects this naming)
-    files.forEach((file, index) => {
-      formData.append(`file${index + 1}`, file.buffer, {
-        filename: file.name,
-        contentType: this.getMimeType(file.name),
-      })
-    })
-
-    console.log(`[PayPalDisputesAPI] Uploading ${files.length} evidence file(s)`)
-    console.log(`[PayPalDisputesAPI] Files:`, files.map(f => `${f.name} (${f.buffer.length} bytes)`).join(', '))
-    console.log(`[PayPalDisputesAPI] Evidence type: ${evidenceType}`)
-    console.log(`[PayPalDisputesAPI] Input data:`, JSON.stringify(inputData, null, 2))
-
-    return this.client.requestMultipart<ProvideEvidenceResponse>(
-      `/v1/customer/disputes/${disputeId}/provide-evidence`,
-      formData
-    )
-  }
-
-  /**
-   * Get MIME type from filename
-   */
-  private getMimeType(fileName: string): string {
-    const ext = fileName.toLowerCase().split(".").pop()
-    const mimeTypes: Record<string, string> = {
-      pdf: "application/pdf",
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      png: "image/png",
-      gif: "image/gif",
-      doc: "application/msword",
-      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    }
-    return mimeTypes[ext || ""] || "application/octet-stream"
-  }
-
-  /**
    * Send message for a dispute
    * POST /v1/customer/disputes/{id}/send-message
-   * According to PayPal docs: https://docs.paypal.ai/reference/api/rest/disputes-actions/send-message-about-dispute-to-other-party
-   * Uses multipart/form-data with optional message_document file
-   * Note: Only works when dispute_life_cycle_stage is INQUIRY
    */
   async sendMessage(
     disputeId: string,
-    fileBuffer?: Buffer,
-    fileName?: string
+    message: string,
+    postedBy?: string,
+    attachments?: Array<{ name: string; url: string }>
   ): Promise<SendMessageResponse> {
-    // According to PayPal docs, send-message uses multipart/form-data
-    // with optional message_document file
-    const formData = new FormData()
-    
-    if (fileBuffer && fileName) {
-      formData.append("message_document", fileBuffer, {
-        filename: fileName,
-        contentType: this.getMimeType(fileName),
-      })
+    const body: SendMessageRequest = {
+      message,
+    }
+    if (postedBy) {
+      body.posted_by = postedBy
+    }
+    if (attachments) {
+      body.attachments = attachments
     }
 
-    return this.client.requestMultipart<SendMessageResponse>(
-      `/v1/customer/disputes/${disputeId}/send-message`,
-      formData
-    )
-  }
-
-  /**
-   * Make offer to resolve dispute
-   * POST /v1/customer/disputes/{id}/make-offer
-   * According to PayPal docs: https://docs.paypal.ai/reference/api/rest/disputes-actions/make-offer-to-resolve-dispute
-   * Note: Only works when dispute stage is INQUIRY
-   */
-  async makeOffer(
-    disputeId: string,
-    offer: MakeOfferRequest
-  ): Promise<MakeOfferResponse> {
-    return this.client.request<MakeOfferResponse>(
+    return this.client.request<SendMessageResponse>(
       "POST",
-      `/v1/customer/disputes/${disputeId}/make-offer`,
-      offer
+      `/v1/customer/disputes/${disputeId}/send-message`,
+      body
     )
   }
 }

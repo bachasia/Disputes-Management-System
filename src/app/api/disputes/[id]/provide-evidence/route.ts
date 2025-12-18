@@ -20,6 +20,7 @@ export async function POST(
     if (permissionError) return permissionError
 
     const { id } = params
+    const body = await request.json()
 
     // Get dispute with account
     const dispute = await prisma.dispute.findUnique({
@@ -55,93 +56,12 @@ export async function POST(
     )
     const disputesAPI = new PayPalDisputesAPI(paypalClient)
 
-    // Parse FormData
-    const formData = await request.formData()
-    const files = formData.getAll("evidence-file") as File[]
-    const evidenceJson = formData.get("evidence")
-
-    let evidence: any[] = []
-    let note: string | undefined
-
-    // Parse evidence JSON if provided
-    if (evidenceJson && typeof evidenceJson === "string") {
-      try {
-        const evidenceData = JSON.parse(evidenceJson)
-        evidence = evidenceData.evidence || []
-        note = evidenceData.note
-      } catch (e) {
-        console.error("Error parsing evidence JSON:", e)
-      }
-    }
-
-    // Extract tracking info from evidence array if provided
-    let trackingInfo: { carrier_name: string; tracking_number: string } | undefined
-    
-    for (const e of evidence) {
-      if (e.evidence_info?.tracking_info?.length > 0) {
-        const track = e.evidence_info.tracking_info[0]
-        if (track.carrier_name && track.tracking_number) {
-          trackingInfo = {
-            carrier_name: track.carrier_name,
-            tracking_number: track.tracking_number,
-          }
-          break
-        }
-      }
-    }
-
-    // Determine evidence type based on dispute reason
-    // PROOF_OF_FULFILLMENT is ONLY for "Item Not Received" (INR) disputes
-    // For "Item Not As Described" (SNAD) and other disputes, use OTHER
-    const getEvidenceType = (disputeReason: string | null, hasTracking: boolean): string => {
-      const reason = disputeReason?.toUpperCase() || ""
-      
-      // Only use PROOF_OF_FULFILLMENT for INR disputes with tracking info
-      if (reason.includes("NOT_RECEIVED") && hasTracking) {
-        return "PROOF_OF_FULFILLMENT"
-      }
-      
-      // For all other disputes (including SNAD), use OTHER
-      return "OTHER"
-    }
-
-    const evidenceType = getEvidenceType(dispute.disputeReason, !!trackingInfo)
-    console.log(`[ProvideEvidence] Dispute reason: ${dispute.disputeReason}, Evidence type: ${evidenceType}`)
-
     // Provide evidence via PayPal API
-    // IMPORTANT: All files must be uploaded in ONE request!
-    // After first submission, dispute state changes and no more evidence can be added.
-    if (files.length > 0) {
-      // Convert all Files to Buffers
-      const fileBuffers: Array<{ buffer: Buffer; name: string }> = []
-      
-      for (const file of files) {
-        const arrayBuffer = await file.arrayBuffer()
-        const buffer = Buffer.from(arrayBuffer)
-        fileBuffers.push({ buffer, name: file.name })
-      }
-      
-      // Upload ALL files in ONE request
-      await disputesAPI.provideEvidenceWithFiles(
-        dispute.disputeId,
-        fileBuffers,
-        evidenceType,
-        trackingInfo,
-        note
-      )
-    } else if (evidence.length > 0) {
-      // Only JSON method if no files
-      await disputesAPI.provideEvidence(
-        dispute.disputeId,
-        evidence,
-        note
-      )
-    } else {
-      return NextResponse.json(
-        { error: "Bad Request", message: "Please provide at least one piece of evidence" },
-        { status: 400 }
-      )
-    }
+    await disputesAPI.provideEvidence(
+      dispute.disputeId,
+      body.evidence,
+      body.note
+    )
 
     // Create history record
     await prisma.disputeHistory.create({
@@ -149,11 +69,8 @@ export async function POST(
         disputeId: id,
         actionType: "EVIDENCE_PROVIDED",
         actionBy: "USER",
-        description: note || `Evidence provided${files.length > 0 ? ` with ${files.length} file(s)` : ""}`,
-        metadata: { 
-          evidence: evidence.length > 0 ? evidence : undefined,
-          filesCount: files.length,
-        },
+        description: body.note || "Evidence provided",
+        metadata: { evidence: body.evidence },
       },
     })
 

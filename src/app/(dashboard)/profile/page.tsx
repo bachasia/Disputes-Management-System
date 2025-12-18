@@ -15,7 +15,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { UserAvatar } from "@/components/user/UserAvatar"
 import { RoleBadge } from "@/components/user/RoleBadge"
-import { getLoginUrl } from "@/lib/utils/auth"
 
 interface ProfileData {
   name: string
@@ -135,8 +134,7 @@ export default function ProfilePage() {
       toast.success("Password changed successfully! Please login again.")
       resetPassword()
       setTimeout(() => {
-        const loginUrl = getLoginUrl()
-        signOut({ callbackUrl: loginUrl })
+        signOut({ callbackUrl: "/login" })
       }, 2000)
     } catch (error: any) {
       console.error("Error changing password:", error)

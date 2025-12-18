@@ -1,6 +1,5 @@
 import axios, { AxiosInstance, AxiosRequestConfig, Method } from "axios"
 import CryptoJS from "crypto-js"
-import FormData from "form-data"
 
 export interface PayPalCredentials {
   clientId: string
@@ -106,24 +105,15 @@ export class PayPalClient {
       }
     }
 
-    // Determine Content-Type: if data is FormData, let axios set it automatically
-    const isFormData = data instanceof FormData
-    const contentType = isFormData ? undefined : "application/json"
-
     const requestConfig: AxiosRequestConfig = {
       method,
       url,
       headers: {
         Authorization: `Bearer ${token}`,
-        ...(contentType && { "Content-Type": contentType }),
+        "Content-Type": "application/json",
         ...config?.headers,
       },
       ...config,
-    }
-
-    // Remove Content-Type from headers if FormData (axios will set it with boundary)
-    if (isFormData && requestConfig.headers) {
-      delete (requestConfig.headers as any)["Content-Type"]
     }
 
     if (data) {
@@ -196,76 +186,6 @@ export class PayPalClient {
           error.response.data
         )
       }
-      throw error
-    }
-  }
-
-  /**
-   * Make a multipart/form-data request to PayPal API
-   * Uses native fetch with form-data package for proper Node.js support
-   */
-  async requestMultipart<T = any>(
-    endpoint: string,
-    formData: FormData
-  ): Promise<T> {
-    const token = await this.getAccessToken()
-
-    console.log(`[PayPalClient] POST ${endpoint} (multipart)`)
-
-    // Get the form data as buffer and headers
-    const formBuffer = formData.getBuffer()
-    const formHeaders = formData.getHeaders()
-
-    console.log(`[PayPalClient] Form buffer size: ${formBuffer.length}`)
-    console.log(`[PayPalClient] Headers:`, {
-      ...formHeaders,
-      Authorization: `Bearer ${token.substring(0, 20)}...`,
-    })
-    
-    // Debug: Log first 500 chars of form body to see structure
-    const bodyPreview = formBuffer.toString('utf8', 0, Math.min(500, formBuffer.length))
-    console.log(`[PayPalClient] Body preview:`, bodyPreview)
-
-    try {
-      // Convert Buffer to Uint8Array for fetch body
-      const bodyData = new Uint8Array(formBuffer)
-      
-      const response = await fetch(`${this.baseURL}${endpoint}`, {
-        method: "POST",
-        headers: {
-          ...formHeaders,
-          Authorization: `Bearer ${token}`,
-        },
-        body: bodyData,
-      })
-
-      const responseData = await response.json()
-
-      if (!response.ok) {
-        console.error(`[PayPalClient] Multipart Error response:`, {
-          status: response.status,
-          data: JSON.stringify(responseData, null, 2),
-          url: endpoint,
-        })
-
-        if (responseData?.details) {
-          console.error(`[PayPalClient] Error details:`, responseData.details)
-        }
-
-        throw new PayPalAPIError(
-          responseData?.message || "PayPal API Error",
-          response.status,
-          responseData
-        )
-      }
-
-      console.log(`[PayPalClient] Success response:`, response.status)
-      return responseData as T
-    } catch (error: any) {
-      if (error instanceof PayPalAPIError) {
-        throw error
-      }
-      console.error(`[PayPalClient] Request error:`, error)
       throw error
     }
   }

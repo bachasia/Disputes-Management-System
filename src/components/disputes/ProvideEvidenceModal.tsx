@@ -13,12 +13,34 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
-import { FileText, X } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  CARRIER_CODES,
+  CARRIER_DISPLAY_NAMES,
+  TRACKING_STATUS_DISPLAY,
+  TrackingStatus,
+} from "@/lib/paypal/tracking"
+
+// Evidence types matching PayPal's supported types
+const EVIDENCE_TYPES = {
+  PROOF_OF_FULFILLMENT: "Provide Fulfilment Information",
+  PROOF_OF_REFUND: "Refund Information",
+  OTHER: "Any other information",
+} as const
+
+type EvidenceType = keyof typeof EVIDENCE_TYPES
 
 interface ProvideEvidenceModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   disputeId: string
+  transactionId?: string | null
   onSuccess: () => void
 }
 
@@ -26,208 +48,328 @@ export function ProvideEvidenceModal({
   open,
   onOpenChange,
   disputeId,
+  transactionId,
   onSuccess,
 }: ProvideEvidenceModalProps) {
+  const [evidenceType, setEvidenceType] = React.useState<EvidenceType>("PROOF_OF_FULFILLMENT")
   const [note, setNote] = React.useState("")
   const [trackingNumber, setTrackingNumber] = React.useState("")
-  const [carrierName, setCarrierName] = React.useState("")
-  const [files, setFiles] = React.useState<File[]>([])
+  const [carrier, setCarrier] = React.useState("")
+  const [carrierOther, setCarrierOther] = React.useState("")
+  const [trackingStatus, setTrackingStatus] = React.useState<TrackingStatus>("SHIPPED")
+  const [trackingUrl, setTrackingUrl] = React.useState("")
+  const [refundId, setRefundId] = React.useState("")
   const [loading, setLoading] = React.useState(false)
-  const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const [error, setError] = React.useState<string | null>(null)
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const newFiles = Array.from(e.target.files)
-      setFiles((prev) => [...prev, ...newFiles])
+  const resetForm = () => {
+    setEvidenceType("PROOF_OF_FULFILLMENT")
+    setNote("")
+    setTrackingNumber("")
+    setCarrier("")
+    setCarrierOther("")
+    setTrackingStatus("SHIPPED")
+    setTrackingUrl("")
+    setRefundId("")
+    setError(null)
+  }
+
+  const handleClose = (open: boolean) => {
+    if (!open) {
+      resetForm()
     }
-  }
-
-  const removeFile = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index))
-  }
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes"
-    const k = 1024
-    const sizes = ["Bytes", "KB", "MB", "GB"]
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + " " + sizes[i]
+    onOpenChange(open)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setError(null)
 
     try {
-      // Validate: need either tracking info or files
-      if (!trackingNumber && !carrierName && files.length === 0) {
-        alert("Please provide at least one piece of evidence (tracking info or documents)")
-        setLoading(false)
-        return
+      // Step 1: If fulfillment info with tracking, call Add Tracking API first
+      if (
+        evidenceType === "PROOF_OF_FULFILLMENT" &&
+        trackingNumber &&
+        carrier &&
+        transactionId
+      ) {
+        const trackingResponse = await fetch(`/api/disputes/${disputeId}/add-tracking`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            transactionId,
+            trackingNumber,
+            carrier: carrier === "OTHER" ? "OTHER" : carrier,
+            status: trackingStatus,
+            carrierNameOther: carrier === "OTHER" ? carrierOther : undefined,
+            trackingUrl: trackingUrl || undefined,
+          }),
+        })
+
+        if (!trackingResponse.ok) {
+          const trackingError = await trackingResponse.json()
+          console.warn("Tracking API warning:", trackingError)
+          // Don't fail - continue with evidence submission even if tracking fails
+          // PayPal may already have tracking or transaction may not support it
+        }
       }
 
-      // Create FormData for multipart/form-data
-      const formData = new FormData()
+      // Step 2: Call Provide Evidence API
+      const evidence: any[] = []
 
-      // Add files if any
-      files.forEach((file) => {
-        formData.append("evidence-file", file)
-      })
-
-      // Add tracking info and note as JSON if provided
-      const evidenceData: any = {}
-      
-      if (trackingNumber || carrierName) {
-        evidenceData.evidence = [
-          {
+      if (evidenceType === "PROOF_OF_FULFILLMENT") {
+        // Add tracking info as evidence
+        if (trackingNumber || carrier) {
+          evidence.push({
             evidence_type: "PROOF_OF_FULFILLMENT",
             evidence_info: {
               tracking_info: [
                 {
-                  carrier_name: carrierName || undefined,
+                  carrier_name: carrier === "OTHER" ? carrierOther : carrier || undefined,
                   tracking_number: trackingNumber || undefined,
                 },
               ],
             },
+          })
+        }
+      } else if (evidenceType === "PROOF_OF_REFUND") {
+        // Add refund info as evidence
+        if (refundId) {
+          evidence.push({
+            evidence_type: "PROOF_OF_REFUND",
+            evidence_info: {
+              refund_ids: [refundId],
+            },
+          })
+        }
+      } else {
+        // OTHER evidence type - just use note
+        if (note) {
+          evidence.push({
+            evidence_type: "OTHER",
+            evidence_info: {
+              notes: note,
+            },
+          })
+        }
+      }
+
+      // If no evidence items but has a note, add it
+      if (evidence.length === 0 && note) {
+        evidence.push({
+          evidence_type: evidenceType,
+          evidence_info: {
+            notes: note,
           },
-        ]
+        })
       }
 
-      if (note) {
-        evidenceData.note = note
-      }
-
-      // If we have evidence data (tracking or note), add it as JSON
-      if (Object.keys(evidenceData).length > 0) {
-        formData.append("evidence", JSON.stringify(evidenceData))
+      if (evidence.length === 0) {
+        setError("Please provide at least one piece of evidence")
+        setLoading(false)
+        return
       }
 
       const response = await fetch(`/api/disputes/${disputeId}/provide-evidence`, {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          evidence,
+          note: note || undefined,
+        }),
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Failed to provide evidence")
+        const errorData = await response.json()
+        throw new Error(errorData.message || "Failed to provide evidence")
       }
 
       onSuccess()
-      onOpenChange(false)
-      setNote("")
-      setTrackingNumber("")
-      setCarrierName("")
-      setFiles([])
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ""
-      }
+      handleClose(false)
     } catch (error) {
       console.error("Error providing evidence:", error)
-      alert(error instanceof Error ? error.message : "Failed to provide evidence. Please try again.")
+      setError(error instanceof Error ? error.message : "Failed to provide evidence. Please try again.")
     } finally {
       setLoading(false)
     }
   }
 
+  // Get ordered carrier list
+  const carrierList = Object.keys(CARRIER_CODES)
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col">
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Provide Evidence</DialogTitle>
           <DialogDescription>
             Submit evidence to support your case in this dispute.
+            {!transactionId && (
+              <span className="block mt-1 text-yellow-600">
+                Note: Transaction ID not available. Tracking will be added to evidence only.
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
-          <div className="space-y-4 py-4 px-1 overflow-y-auto flex-1">
+        <form onSubmit={handleSubmit}>
+          <div className="space-y-4 py-4">
+            {/* Evidence Type Selector */}
             <div className="space-y-2">
-              <Label htmlFor="carrier">Carrier Name</Label>
-              <Input
-                id="carrier"
-                value={carrierName}
-                onChange={(e) => setCarrierName(e.target.value)}
-                placeholder="e.g., UPS, FedEx, DHL"
+              <Label htmlFor="evidence-type">Evidence Type</Label>
+              <Select
+                value={evidenceType}
+                onValueChange={(value) => setEvidenceType(value as EvidenceType)}
                 disabled={loading}
-              />
+              >
+                <SelectTrigger id="evidence-type">
+                  <SelectValue placeholder="Select evidence type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(EVIDENCE_TYPES).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="tracking">Tracking Number</Label>
-              <Input
-                id="tracking"
-                value={trackingNumber}
-                onChange={(e) => setTrackingNumber(e.target.value)}
-                placeholder="Enter tracking number"
-                disabled={loading}
-              />
-            </div>
+            {/* Fulfilment Information Fields */}
+            {evidenceType === "PROOF_OF_FULFILLMENT" && (
+              <>
+                {/* Carrier Dropdown */}
+                <div className="space-y-2">
+                  <Label htmlFor="carrier">Carrier</Label>
+                  <Select
+                    value={carrier}
+                    onValueChange={setCarrier}
+                    disabled={loading}
+                  >
+                    <SelectTrigger id="carrier">
+                      <SelectValue placeholder="Select carrier" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {carrierList.map((code) => (
+                        <SelectItem key={code} value={code}>
+                          {CARRIER_DISPLAY_NAMES[code] || code}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
+                {/* Other Carrier Name (when OTHER is selected) */}
+                {carrier === "OTHER" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="carrier-other">Carrier Name</Label>
+                    <Input
+                      id="carrier-other"
+                      value={carrierOther}
+                      onChange={(e) => setCarrierOther(e.target.value)}
+                      placeholder="Enter carrier name"
+                      disabled={loading}
+                    />
+                  </div>
+                )}
+
+                {/* Tracking Number */}
+                <div className="space-y-2">
+                  <Label htmlFor="tracking">Tracking Number</Label>
+                  <Input
+                    id="tracking"
+                    value={trackingNumber}
+                    onChange={(e) => setTrackingNumber(e.target.value)}
+                    placeholder="Enter tracking number"
+                    disabled={loading}
+                  />
+                </div>
+
+                {/* Tracking Status Dropdown */}
+                <div className="space-y-2">
+                  <Label htmlFor="tracking-status">Tracking Status</Label>
+                  <Select
+                    value={trackingStatus}
+                    onValueChange={(value) => setTrackingStatus(value as TrackingStatus)}
+                    disabled={loading}
+                  >
+                    <SelectTrigger id="tracking-status">
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(TRACKING_STATUS_DISPLAY).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Tracking URL (Optional) */}
+                <div className="space-y-2">
+                  <Label htmlFor="tracking-url">Tracking Link (Optional)</Label>
+                  <Input
+                    id="tracking-url"
+                    type="url"
+                    value={trackingUrl}
+                    onChange={(e) => setTrackingUrl(e.target.value)}
+                    placeholder="https://..."
+                    disabled={loading}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Refund Information Fields */}
+            {evidenceType === "PROOF_OF_REFUND" && (
+              <div className="space-y-2">
+                <Label htmlFor="refund-id">Refund ID</Label>
+                <Input
+                  id="refund-id"
+                  value={refundId}
+                  onChange={(e) => setRefundId(e.target.value)}
+                  placeholder="Enter PayPal refund ID"
+                  disabled={loading}
+                />
+              </div>
+            )}
+
+            {/* Note (for all types) */}
             <div className="space-y-2">
-              <Label htmlFor="note">Note (Optional)</Label>
+              <Label htmlFor="note">
+                {evidenceType === "OTHER" ? "Evidence Details" : "Additional Notes (Optional)"}
+              </Label>
               <Textarea
                 id="note"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="Add additional information..."
+                placeholder={
+                  evidenceType === "OTHER"
+                    ? "Describe the evidence you are providing..."
+                    : "Add any additional information..."
+                }
                 rows={4}
                 disabled={loading}
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="files">Documents (Optional)</Label>
-              <div className="space-y-2">
-                <Input
-                  id="files"
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileSelect}
-                  multiple
-                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                  disabled={loading}
-                  className="cursor-pointer"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Supported formats: PDF, JPG, PNG, DOC, DOCX
-                </p>
-                {files.length > 0 && (
-                  <div className="space-y-2 mt-2 max-h-[200px] overflow-y-auto pr-1">
-                    {files.map((file, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between p-2 bg-muted rounded-md"
-                      >
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                          <span className="text-sm truncate" title={file.name}>
-                            {file.name}
-                          </span>
-                          <span className="text-xs text-muted-foreground flex-shrink-0">
-                            ({formatFileSize(file.size)})
-                          </span>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeFile(index)}
-                          disabled={loading}
-                          className="h-6 w-6 p-0 flex-shrink-0"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+            {/* Error Message */}
+            {error && (
+              <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
+                {error}
               </div>
-            </div>
+            )}
           </div>
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
-              onClick={() => onOpenChange(false)}
+              onClick={() => handleClose(false)}
               disabled={loading}
             >
               Cancel
@@ -241,6 +383,3 @@ export function ProvideEvidenceModal({
     </Dialog>
   )
 }
-
-
-

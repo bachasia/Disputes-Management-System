@@ -152,15 +152,16 @@ export async function GET(request: NextRequest) {
       return null
     }
 
-    // Helper function to determine outcome type (won, lost, cancelled)
-    const determineOutcomeType = (dispute: any): "won" | "lost" | "cancelled" | null => {
-      const actualOutcome = getActualOutcome(dispute)
+    // Calculate won disputes - only count resolved disputes with seller-favorable outcome
+    const won = resolved.filter((d) => {
+      // Get actual outcome (from disputeOutcome or rawData)
+      const actualOutcome = getActualOutcome(d)
       
       if (!actualOutcome || actualOutcome.trim() === "") {
-        // If resolved but no outcome, consider it cancelled
-        const status = dispute.disputeStatus?.toUpperCase() || ""
-        const isResolved = status === "RESOLVED" || status === "CLOSED" || !!dispute.resolvedAt
-        return isResolved ? "cancelled" : null
+        console.log(
+          `[Analytics] Dispute with status "${d.disputeStatus}" has no valid outcome (stored: "${d.disputeOutcome || 'null'}"). Cannot determine win/loss.`
+        )
+        return false
       }
       
       const outcome = actualOutcome.toUpperCase().trim()
@@ -182,10 +183,11 @@ export async function GET(request: NextRequest) {
       )
       
       if (isBuyerWin) {
-        return "lost"
+        console.log(`[Analytics] ✗ Dispute with outcome "${actualOutcome}" is BUYER WIN (seller lost)`)
+        return false
       }
       
-      // Check for seller win indicators
+      // Check for seller win indicators - expanded list
       const isWon = (
         outcome.includes("SELLER") ||
         outcome === "WON" ||
@@ -207,36 +209,18 @@ export async function GET(request: NextRequest) {
       )
       
       if (isWon) {
-        return "won"
-      }
-      
-      // If resolved but outcome doesn't match known patterns, consider cancelled
-      const status = dispute.disputeStatus?.toUpperCase() || ""
-      const isResolved = status === "RESOLVED" || status === "CLOSED" || !!dispute.resolvedAt
-      return isResolved ? "cancelled" : null
-    }
-
-    // Calculate won disputes - includes both Won and Cancelled
-    const won = resolved.filter((d) => {
-      const outcomeType = determineOutcomeType(d)
-      const isWon = outcomeType === "won" || outcomeType === "cancelled"
-      
-      if (isWon) {
-        const actualOutcome = getActualOutcome(d)
-        console.log(`[Analytics] ✓ Dispute with outcome "${actualOutcome || 'none'}" (from ${d.disputeOutcome ? 'stored' : 'rawData'}) is counted as WON (type: ${outcomeType})`)
-      } else if (outcomeType === "lost") {
-        const actualOutcome = getActualOutcome(d)
-        console.log(`[Analytics] ✗ Dispute with outcome "${actualOutcome || 'none'}" is BUYER WIN (seller lost)`)
+        console.log(`[Analytics] ✓ Dispute with outcome "${actualOutcome}" (from ${d.disputeOutcome ? 'stored' : 'rawData'}) is counted as WON`)
+      } else {
+        console.log(`[Analytics] ✗ Dispute with outcome "${actualOutcome}" (from ${d.disputeOutcome ? 'stored' : 'rawData'}) is NOT counted as WON (may be buyer win or unknown)`)
       }
       
       return isWon
     }).length
 
     console.log(
-      `[Analytics] Win Rate calculation: won=${won} (includes Won + Cancelled), resolved=${resolvedCount}, winRate=${resolvedCount > 0 ? (won / resolvedCount) * 100 : 0}%`
+      `[Analytics] Win Rate calculation: won=${won}, resolved=${resolvedCount}, winRate=${resolvedCount > 0 ? (won / resolvedCount) * 100 : 0}%`
     )
 
-    // Win Rate = (Won + Cancelled) / Resolved * 100
     const winRate = resolvedCount > 0 ? (won / resolvedCount) * 100 : 0
 
     // Calculate total amount by currency

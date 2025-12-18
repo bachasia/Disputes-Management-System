@@ -42,6 +42,7 @@ const STATUS_OPTIONS = [
   { value: "WAITING_FOR_SELLER_RESPONSE", label: "Waiting for Seller Response" },
   { value: "UNDER_REVIEW", label: "Under Review" },
   { value: "RESOLVED", label: "Resolved" },
+  { value: "CLOSED", label: "Closed" },
 ]
 
 const DISPUTE_TYPE_OPTIONS = [

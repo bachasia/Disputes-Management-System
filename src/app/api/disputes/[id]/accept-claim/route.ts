@@ -20,6 +20,7 @@ export async function POST(
     if (permissionError) return permissionError
 
     const { id } = params
+    const body = await request.json()
 
     // Get dispute with account
     const dispute = await prisma.dispute.findUnique({
@@ -55,22 +56,8 @@ export async function POST(
     )
     const disputesAPI = new PayPalDisputesAPI(paypalClient)
 
-    // Parse FormData (according to PayPal docs, accept-claim uses multipart/form-data)
-    const formData = await request.formData()
-    const file = formData.get("accept-claim-document") as File | null
-    const note = formData.get("note") as string | null
-
-    // Convert File to Buffer if provided
-    let fileBuffer: Buffer | undefined
-    let fileName: string | undefined
-    if (file) {
-      const arrayBuffer = await file.arrayBuffer()
-      fileBuffer = Buffer.from(arrayBuffer)
-      fileName = file.name
-    }
-
-    // Accept claim via PayPal API (file is optional according to PayPal docs)
-    await disputesAPI.acceptClaim(dispute.disputeId, fileBuffer, fileName)
+    // Accept claim via PayPal API
+    await disputesAPI.acceptClaim(dispute.disputeId, body.note)
 
     // Update dispute status
     await prisma.dispute.update({
@@ -89,11 +76,7 @@ export async function POST(
         actionBy: "USER",
         oldValue: dispute.disputeStatus || "",
         newValue: "RESOLVED",
-        description: note || "Claim accepted",
-        metadata: {
-          hasDocument: !!file,
-          fileName: file?.name,
-        },
+        description: body.note || "Claim accepted",
       },
     })
 
