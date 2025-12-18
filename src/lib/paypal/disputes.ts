@@ -330,12 +330,16 @@ export class PayPalDisputesAPI {
     // Create FormData using form-data package (Node.js compatible)
     const formData = new FormData()
     
-    // Add input JSON as a regular form field (not a file)
+    // Add input JSON with Content-Type: application/json
     const inputData = {
       evidence_type: evidenceType,
       documents: [{ name: fileName }]
     }
-    formData.append("input", JSON.stringify(inputData))
+    // Create a buffer from JSON string and append with contentType
+    const inputBuffer = Buffer.from(JSON.stringify(inputData), 'utf8')
+    formData.append("input", inputBuffer, {
+      contentType: "application/json",
+    })
     
     // Add the file
     formData.append("evidence-file", fileBuffer, {
