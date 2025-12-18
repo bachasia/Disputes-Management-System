@@ -26,6 +26,7 @@ import {
   TRACKING_STATUS_DISPLAY,
   TrackingStatus,
 } from "@/lib/paypal/tracking"
+import { Upload, X, FileText } from "lucide-react"
 
 // Evidence types matching PayPal's supported types
 const EVIDENCE_TYPES = {
@@ -35,6 +36,16 @@ const EVIDENCE_TYPES = {
 } as const
 
 type EvidenceType = keyof typeof EVIDENCE_TYPES
+
+// File upload constraints
+const MAX_FILES = 10
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB per file
+const MAX_TOTAL_SIZE = 50 * 1024 * 1024 // 50MB total
+const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/gif", "image/png", "application/pdf", "text/plain"]
+const ALLOWED_EXTENSIONS = ".jpg,.jpeg,.gif,.png,.pdf,.txt"
+
+// Note character limit
+const MAX_NOTE_LENGTH = 2000
 
 interface ProvideEvidenceModalProps {
   open: boolean
@@ -59,8 +70,11 @@ export function ProvideEvidenceModal({
   const [trackingStatus, setTrackingStatus] = React.useState<TrackingStatus>("SHIPPED")
   const [trackingUrl, setTrackingUrl] = React.useState("")
   const [refundId, setRefundId] = React.useState("")
+  const [files, setFiles] = React.useState<File[]>([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [isDragging, setIsDragging] = React.useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const resetForm = () => {
     setEvidenceType("PROOF_OF_FULFILLMENT")
@@ -71,6 +85,7 @@ export function ProvideEvidenceModal({
     setTrackingStatus("SHIPPED")
     setTrackingUrl("")
     setRefundId("")
+    setFiles([])
     setError(null)
   }
 
@@ -79,6 +94,114 @@ export function ProvideEvidenceModal({
       resetForm()
     }
     onOpenChange(open)
+  }
+
+  const validateFiles = (newFiles: File[]): { valid: File[]; errors: string[] } => {
+    const errors: string[] = []
+    const valid: File[] = []
+    
+    const currentTotalSize = files.reduce((sum, f) => sum + f.size, 0)
+    let newTotalSize = currentTotalSize
+    
+    for (const file of newFiles) {
+      // Check file count
+      if (files.length + valid.length >= MAX_FILES) {
+        errors.push(`Maximum ${MAX_FILES} files allowed`)
+        break
+      }
+      
+      // Check file type
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        errors.push(`${file.name}: Invalid file type. Allowed: JPG, GIF, PNG, PDF, TXT`)
+        continue
+      }
+      
+      // Check individual file size
+      if (file.size > MAX_FILE_SIZE) {
+        errors.push(`${file.name}: File too large. Maximum 10MB per file`)
+        continue
+      }
+      
+      // Check total size
+      if (newTotalSize + file.size > MAX_TOTAL_SIZE) {
+        errors.push(`Total file size exceeds 50MB limit`)
+        break
+      }
+      
+      newTotalSize += file.size
+      valid.push(file)
+    }
+    
+    return { valid, errors }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files)
+      const { valid, errors } = validateFiles(newFiles)
+      
+      if (errors.length > 0) {
+        setError(errors.join(". "))
+      } else {
+        setError(null)
+      }
+      
+      if (valid.length > 0) {
+        setFiles(prev => [...prev, ...valid])
+      }
+    }
+    // Reset input to allow selecting same file again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    
+    if (e.dataTransfer.files) {
+      const newFiles = Array.from(e.dataTransfer.files)
+      const { valid, errors } = validateFiles(newFiles)
+      
+      if (errors.length > 0) {
+        setError(errors.join(". "))
+      } else {
+        setError(null)
+      }
+      
+      if (valid.length > 0) {
+        setFiles(prev => [...prev, ...valid])
+      }
+    }
+  }
+
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index))
+    setError(null)
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + " B"
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB"
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB"
+  }
+
+  const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value
+    if (value.length <= MAX_NOTE_LENGTH) {
+      setNote(value)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -118,11 +241,14 @@ export function ProvideEvidenceModal({
       }
 
       // Step 2: Call Provide Evidence API
-      const evidence: any[] = []
-
-      if (evidenceType === "PROOF_OF_FULFILLMENT") {
-        // Add tracking info as evidence
-        if (trackingNumber || carrier) {
+      // Use FormData if files are present
+      if (files.length > 0) {
+        const formData = new FormData()
+        
+        // Add evidence info
+        const evidence: any[] = []
+        
+        if (evidenceType === "PROOF_OF_FULFILLMENT" && (trackingNumber || carrier)) {
           evidence.push({
             evidence_type: "PROOF_OF_FULFILLMENT",
             evidence_info: {
@@ -134,10 +260,7 @@ export function ProvideEvidenceModal({
               ],
             },
           })
-        }
-      } else if (evidenceType === "PROOF_OF_REFUND") {
-        // Add refund info as evidence
-        if (refundId) {
+        } else if (evidenceType === "PROOF_OF_REFUND" && refundId) {
           evidence.push({
             evidence_type: "PROOF_OF_REFUND",
             evidence_info: {
@@ -145,48 +268,102 @@ export function ProvideEvidenceModal({
             },
           })
         }
-      } else {
-        // OTHER evidence type - just use note
-        if (note) {
+        
+        // Always add evidence type for files
+        if (evidence.length === 0) {
           evidence.push({
-            evidence_type: "OTHER",
+            evidence_type: evidenceType,
+            evidence_info: note ? { notes: note } : {},
+          })
+        }
+        
+        formData.append("input", JSON.stringify({
+          evidence,
+          note: note || undefined,
+        }))
+        
+        // Add files
+        files.forEach((file) => {
+          formData.append("evidence_file", file)
+        })
+        
+        const response = await fetch(`/api/disputes/${disputeId}/provide-evidence`, {
+          method: "POST",
+          body: formData,
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.message || "Failed to provide evidence")
+        }
+      } else {
+        // No files - use JSON
+        const evidence: any[] = []
+
+        if (evidenceType === "PROOF_OF_FULFILLMENT") {
+          if (trackingNumber || carrier) {
+            evidence.push({
+              evidence_type: "PROOF_OF_FULFILLMENT",
+              evidence_info: {
+                tracking_info: [
+                  {
+                    carrier_name: carrier === "OTHER" ? carrierOther : carrier || undefined,
+                    tracking_number: trackingNumber || undefined,
+                  },
+                ],
+              },
+            })
+          }
+        } else if (evidenceType === "PROOF_OF_REFUND") {
+          if (refundId) {
+            evidence.push({
+              evidence_type: "PROOF_OF_REFUND",
+              evidence_info: {
+                refund_ids: [refundId],
+              },
+            })
+          }
+        } else {
+          if (note) {
+            evidence.push({
+              evidence_type: "OTHER",
+              evidence_info: {
+                notes: note,
+              },
+            })
+          }
+        }
+
+        if (evidence.length === 0 && note) {
+          evidence.push({
+            evidence_type: evidenceType,
             evidence_info: {
               notes: note,
             },
           })
         }
-      }
 
-      // If no evidence items but has a note, add it
-      if (evidence.length === 0 && note) {
-        evidence.push({
-          evidence_type: evidenceType,
-          evidence_info: {
-            notes: note,
+        if (evidence.length === 0) {
+          setError("Please provide at least one piece of evidence")
+          setLoading(false)
+          return
+        }
+
+        const response = await fetch(`/api/disputes/${disputeId}/provide-evidence`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
           },
+          body: JSON.stringify({
+            evidence,
+            note: note || undefined,
+          }),
         })
-      }
 
-      if (evidence.length === 0) {
-        setError("Please provide at least one piece of evidence")
-        setLoading(false)
-        return
-      }
-
-      const response = await fetch(`/api/disputes/${disputeId}/provide-evidence`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          evidence,
-          note: note || undefined,
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || "Failed to provide evidence")
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.message || "Failed to provide evidence")
+        }
       }
 
       onSuccess()
@@ -201,6 +378,9 @@ export function ProvideEvidenceModal({
 
   // Get ordered carrier list
   const carrierList = Object.keys(CARRIER_CODES)
+  
+  // Calculate total file size
+  const totalFileSize = files.reduce((sum, f) => sum + f.size, 0)
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -291,7 +471,7 @@ export function ProvideEvidenceModal({
 
                 {/* Tracking Status Dropdown */}
                 <div className="space-y-2">
-                  <Label htmlFor="tracking-status">Tracking Status</Label>
+                  <Label htmlFor="tracking-status">Status of Shipment</Label>
                   <Select
                     value={trackingStatus}
                     onValueChange={(value) => setTrackingStatus(value as TrackingStatus)}
@@ -312,7 +492,7 @@ export function ProvideEvidenceModal({
 
                 {/* Tracking URL (Optional) */}
                 <div className="space-y-2">
-                  <Label htmlFor="tracking-url">Tracking Link (Optional)</Label>
+                  <Label htmlFor="tracking-url">Add Tracking Link (Optional)</Label>
                   <Input
                     id="tracking-url"
                     type="url"
@@ -339,15 +519,81 @@ export function ProvideEvidenceModal({
               </div>
             )}
 
+            {/* File Upload Area */}
+            <div className="space-y-2">
+              <Label>Upload Evidence Files</Label>
+              <div
+                className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                  isDragging 
+                    ? "border-primary bg-primary/5" 
+                    : "border-muted-foreground/25 hover:border-primary/50"
+                } ${loading ? "opacity-50 pointer-events-none" : ""}`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept={ALLOWED_EXTENSIONS}
+                  onChange={handleFileChange}
+                  className="hidden"
+                  disabled={loading}
+                />
+                <Upload className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+                <p className="text-sm text-primary font-medium">
+                  Drag and drop or click to browse
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  JPG GIF PNG PDF TXT | Maximum of {MAX_FILES} files up to 10 MB each, 50 MB in total
+                </p>
+              </div>
+              
+              {/* File List */}
+              {files.length > 0 && (
+                <div className="space-y-2 mt-3">
+                  {files.map((file, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-2 bg-muted rounded-md"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                        <span className="text-sm truncate">{file.name}</span>
+                        <span className="text-xs text-muted-foreground flex-shrink-0">
+                          ({formatFileSize(file.size)})
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeFile(index)}
+                        disabled={loading}
+                        className="h-6 w-6 p-0"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <p className="text-xs text-muted-foreground">
+                    {files.length} file(s) selected • Total: {formatFileSize(totalFileSize)}
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Note (for all types) */}
             <div className="space-y-2">
               <Label htmlFor="note">
-                {evidenceType === "OTHER" ? "Evidence Details" : "Additional Notes (Optional)"}
+                {evidenceType === "OTHER" ? "Evidence Details" : "Add more details (optional)"}
               </Label>
               <Textarea
                 id="note"
                 value={note}
-                onChange={(e) => setNote(e.target.value)}
+                onChange={handleNoteChange}
                 placeholder={
                   evidenceType === "OTHER"
                     ? "Describe the evidence you are providing..."
@@ -355,7 +601,11 @@ export function ProvideEvidenceModal({
                 }
                 rows={4}
                 disabled={loading}
+                maxLength={MAX_NOTE_LENGTH}
               />
+              <div className="text-xs text-muted-foreground text-right">
+                {note.length}/{MAX_NOTE_LENGTH}
+              </div>
             </div>
 
             {/* Error Message */}
@@ -375,7 +625,7 @@ export function ProvideEvidenceModal({
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Submitting..." : "Submit Evidence"}
+              {loading ? "Submitting..." : "Submit"}
             </Button>
           </DialogFooter>
         </form>

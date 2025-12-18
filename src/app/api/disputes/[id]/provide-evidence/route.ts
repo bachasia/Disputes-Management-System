@@ -20,7 +20,7 @@ export async function POST(
     if (permissionError) return permissionError
 
     const { id } = params
-    const body = await request.json()
+    const contentType = request.headers.get("content-type") || ""
 
     // Get dispute with account
     const dispute = await prisma.dispute.findUnique({
@@ -56,12 +56,62 @@ export async function POST(
     )
     const disputesAPI = new PayPalDisputesAPI(paypalClient)
 
+    let evidence: any[] = []
+    let note: string | undefined
+    let files: Array<{ buffer: Buffer; filename: string; contentType: string }> = []
+
+    // Check if request is multipart/form-data (has files)
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await request.formData()
+      
+      // Get input JSON
+      const inputField = formData.get("input")
+      if (inputField && typeof inputField === "string") {
+        try {
+          const inputData = JSON.parse(inputField)
+          evidence = inputData.evidence || []
+          note = inputData.note
+        } catch (e) {
+          console.error("Failed to parse input JSON:", e)
+        }
+      }
+      
+      // Get files
+      const fileEntries = formData.getAll("evidence_file")
+      for (const entry of fileEntries) {
+        if (entry instanceof File) {
+          const arrayBuffer = await entry.arrayBuffer()
+          files.push({
+            buffer: Buffer.from(arrayBuffer),
+            filename: entry.name,
+            contentType: entry.type || "application/octet-stream",
+          })
+        }
+      }
+    } else {
+      // JSON request
+      const body = await request.json()
+      evidence = body.evidence || []
+      note = body.note
+    }
+
     // Provide evidence via PayPal API
-    await disputesAPI.provideEvidence(
-      dispute.disputeId,
-      body.evidence,
-      body.note
-    )
+    if (files.length > 0) {
+      // Use multipart upload with files
+      await disputesAPI.provideEvidenceWithFiles(
+        dispute.disputeId,
+        evidence,
+        files,
+        note
+      )
+    } else {
+      // Use JSON-only endpoint
+      await disputesAPI.provideEvidence(
+        dispute.disputeId,
+        evidence,
+        note
+      )
+    }
 
     // Create history record
     await prisma.disputeHistory.create({
@@ -69,8 +119,12 @@ export async function POST(
         disputeId: id,
         actionType: "EVIDENCE_PROVIDED",
         actionBy: "USER",
-        description: body.note || "Evidence provided",
-        metadata: { evidence: body.evidence },
+        description: note || "Evidence provided",
+        metadata: { 
+          evidence,
+          filesCount: files.length,
+          fileNames: files.map(f => f.filename),
+        },
       },
     })
 
@@ -86,5 +140,3 @@ export async function POST(
     )
   }
 }
-
-

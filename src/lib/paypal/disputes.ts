@@ -257,7 +257,7 @@ export class PayPalDisputesAPI {
   }
 
   /**
-   * Provide evidence for a dispute
+   * Provide evidence for a dispute (JSON only, no files)
    * POST /v1/customer/disputes/{id}/provide-evidence
    */
   async provideEvidence(
@@ -277,6 +277,79 @@ export class PayPalDisputesAPI {
       `/v1/customer/disputes/${disputeId}/provide-evidence`,
       body
     )
+  }
+
+  /**
+   * Provide evidence with file uploads for a dispute
+   * POST /v1/customer/disputes/{id}/provide-evidence (multipart/form-data)
+   */
+  async provideEvidenceWithFiles(
+    disputeId: string,
+    evidence: EvidenceItem[],
+    files: Array<{ buffer: Buffer; filename: string; contentType: string }>,
+    note?: string
+  ): Promise<ProvideEvidenceResponse> {
+    const token = await this.client.getAccessToken()
+    const baseURL = this.client["sandbox"]
+      ? "https://api-m.sandbox.paypal.com"
+      : "https://api-m.paypal.com"
+
+    // Build multipart form data manually
+    const boundary = `----FormBoundary${Date.now()}`
+    const parts: Buffer[] = []
+
+    // Add input JSON part
+    const inputData: ProvideEvidenceRequest = { evidence }
+    if (note) {
+      inputData.note = note
+    }
+
+    parts.push(Buffer.from(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="input"\r\n` +
+      `Content-Type: application/json\r\n\r\n` +
+      `${JSON.stringify(inputData)}\r\n`
+    ))
+
+    // Add file parts
+    for (const file of files) {
+      parts.push(Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="evidence_file"; filename="${file.filename}"\r\n` +
+        `Content-Type: ${file.contentType}\r\n\r\n`
+      ))
+      parts.push(file.buffer)
+      parts.push(Buffer.from('\r\n'))
+    }
+
+    // Add closing boundary
+    parts.push(Buffer.from(`--${boundary}--\r\n`))
+
+    const body = Buffer.concat(parts)
+
+    const response = await fetch(
+      `${baseURL}/v1/customer/disputes/${disputeId}/provide-evidence`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        },
+        body: body,
+      }
+    )
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      console.error("PayPal provide-evidence error:", errorData)
+      throw new PayPalAPIError(
+        errorData.message || "Failed to provide evidence",
+        response.status,
+        errorData
+      )
+    }
+
+    return response.json()
   }
 
   /**
