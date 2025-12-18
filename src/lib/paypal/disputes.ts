@@ -317,9 +317,7 @@ export class PayPalDisputesAPI {
    * POST /v1/customer/disputes/{id}/provide-evidence
    * According to PayPal docs: https://docs.paypal.ai/reference/api/rest/disputes-actions/provide-evidence
    * 
-   * PayPal requires:
-   * - input: JSON with evidence_type 
-   * - evidence-file: The document file
+   * Body: evidence-file (file) - A file with evidence
    */
   async provideEvidenceWithFile(
     disputeId: string,
@@ -330,23 +328,14 @@ export class PayPalDisputesAPI {
     // Create FormData using form-data package (Node.js compatible)
     const formData = new FormData()
     
-    // PayPal requires 'input' JSON with evidence_type
-    // Format: input={"evidence_type":"PROOF_OF_FULFILLMENT","documents":[{"name":"filename.pdf"}]}
-    const inputJson = JSON.stringify({
-      evidence_type: evidenceType,
-      documents: [{
-        name: fileName
-      }]
-    })
-    
-    // Append input as plain JSON string
-    formData.append("input", inputJson)
-    
-    // Append the file buffer with filename
+    // According to PayPal docs, only evidence-file is required
+    // The evidence_type should be in filename or PayPal determines automatically
     formData.append("evidence-file", fileBuffer, {
       filename: fileName,
       contentType: this.getMimeType(fileName),
     })
+
+    console.log(`[PayPalDisputesAPI] Uploading evidence file: ${fileName}, size: ${fileBuffer.length} bytes`)
 
     return this.client.requestMultipart<ProvideEvidenceResponse>(
       `/v1/customer/disputes/${disputeId}/provide-evidence`,

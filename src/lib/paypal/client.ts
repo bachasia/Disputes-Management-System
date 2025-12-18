@@ -209,8 +209,13 @@ export class PayPalClient {
     formData: FormData
   ): Promise<T> {
     const token = await this.getAccessToken()
+    const headers = formData.getHeaders()
 
     console.log(`[PayPalClient] POST ${endpoint} (multipart)`)
+    console.log(`[PayPalClient] Headers:`, {
+      ...headers,
+      Authorization: `Bearer ${token.substring(0, 20)}...`,
+    })
 
     try {
       const response = await axios.post<T>(
@@ -218,11 +223,14 @@ export class PayPalClient {
         formData,
         {
           headers: {
-            ...formData.getHeaders(),
+            ...headers,
             Authorization: `Bearer ${token}`,
           },
+          maxBodyLength: Infinity,
+          maxContentLength: Infinity,
         }
       )
+      console.log(`[PayPalClient] Success response:`, response.status)
       return response.data
     } catch (error: any) {
       if (error.response) {
@@ -230,6 +238,7 @@ export class PayPalClient {
           status: error.response.status,
           data: JSON.stringify(error.response.data, null, 2),
           url: endpoint,
+          requestHeaders: error.config?.headers,
         })
 
         if (error.response.data?.details) {
