@@ -60,8 +60,17 @@ export async function POST(
     const file = formData.get("accept-claim-document") as File | null
     const note = formData.get("note") as string | null
 
+    // Convert File to Buffer if provided
+    let fileBuffer: Buffer | undefined
+    let fileName: string | undefined
+    if (file) {
+      const arrayBuffer = await file.arrayBuffer()
+      fileBuffer = Buffer.from(arrayBuffer)
+      fileName = file.name
+    }
+
     // Accept claim via PayPal API (file is optional according to PayPal docs)
-    await disputesAPI.acceptClaim(dispute.disputeId, file || undefined)
+    await disputesAPI.acceptClaim(dispute.disputeId, fileBuffer, fileName)
 
     // Update dispute status
     await prisma.dispute.update({

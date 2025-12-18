@@ -99,9 +99,15 @@ export async function POST(
       // According to PayPal docs, each file should be sent separately
       for (const file of files) {
         const evidenceType = getEvidenceType(file.name, hasTrackingInfo)
+        
+        // Convert File to Buffer for Node.js form-data package
+        const arrayBuffer = await file.arrayBuffer()
+        const buffer = Buffer.from(arrayBuffer)
+        
         await disputesAPI.provideEvidenceWithFile(
           dispute.disputeId,
-          file,
+          buffer,
+          file.name,
           evidenceType
         )
       }

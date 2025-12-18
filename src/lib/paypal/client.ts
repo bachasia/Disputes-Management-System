@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosRequestConfig, Method } from "axios"
 import CryptoJS from "crypto-js"
+import FormData from "form-data"
 
 export interface PayPalCredentials {
   clientId: string
@@ -189,6 +190,52 @@ export class PayPalClient {
           console.error(`[PayPalClient] Error details:`, error.response.data.details)
         }
         
+        throw new PayPalAPIError(
+          error.response.data?.message || "PayPal API Error",
+          error.response.status,
+          error.response.data
+        )
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Make a multipart/form-data request to PayPal API
+   * Uses form-data package for proper Node.js support
+   */
+  async requestMultipart<T = any>(
+    endpoint: string,
+    formData: FormData
+  ): Promise<T> {
+    const token = await this.getAccessToken()
+
+    console.log(`[PayPalClient] POST ${endpoint} (multipart)`)
+
+    try {
+      const response = await axios.post<T>(
+        `${this.baseURL}${endpoint}`,
+        formData,
+        {
+          headers: {
+            ...formData.getHeaders(),
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+      return response.data
+    } catch (error: any) {
+      if (error.response) {
+        console.error(`[PayPalClient] Multipart Error response:`, {
+          status: error.response.status,
+          data: JSON.stringify(error.response.data, null, 2),
+          url: endpoint,
+        })
+
+        if (error.response.data?.details) {
+          console.error(`[PayPalClient] Error details:`, error.response.data.details)
+        }
+
         throw new PayPalAPIError(
           error.response.data?.message || "PayPal API Error",
           error.response.status,

@@ -1,4 +1,5 @@
 import { PayPalClient, PayPalAPIError } from "./client"
+import FormData from "form-data"
 
 /**
  * PayPal Disputes API Response Types
@@ -268,18 +269,21 @@ export class PayPalDisputesAPI {
    */
   async acceptClaim(
     disputeId: string,
-    file?: File | Blob
+    fileBuffer?: Buffer,
+    fileName?: string
   ): Promise<AcceptClaimResponse> {
     // According to PayPal docs, accept-claim uses multipart/form-data
     // with optional accept-claim-document file
     const formData = new FormData()
     
-    if (file) {
-      formData.append("accept-claim-document", file)
+    if (fileBuffer && fileName) {
+      formData.append("accept-claim-document", fileBuffer, {
+        filename: fileName,
+        contentType: this.getMimeType(fileName),
+      })
     }
 
-    return this.client.request<AcceptClaimResponse>(
-      "POST",
+    return this.client.requestMultipart<AcceptClaimResponse>(
       `/v1/customer/disputes/${disputeId}/accept-claim`,
       formData
     )
@@ -319,10 +323,11 @@ export class PayPalDisputesAPI {
    */
   async provideEvidenceWithFile(
     disputeId: string,
-    file: File | Blob,
+    fileBuffer: Buffer,
+    fileName: string,
     evidenceType: string = "PROOF_OF_FULFILLMENT"
   ): Promise<ProvideEvidenceResponse> {
-    // Create FormData for multipart/form-data
+    // Create FormData using form-data package (Node.js compatible)
     const formData = new FormData()
     
     // PayPal requires 'input' JSON part with evidence info
@@ -330,23 +335,43 @@ export class PayPalDisputesAPI {
       evidence: [{
         evidence_type: evidenceType,
         documents: [{
-          name: file instanceof File ? file.name : "document"
+          name: fileName
         }]
       }]
     })
     
     // Append input as JSON with proper content type
-    const inputBlob = new Blob([inputJson], { type: "application/json" })
-    formData.append("input", inputBlob)
+    formData.append("input", inputJson, {
+      contentType: "application/json",
+    })
     
-    // Append the file
-    formData.append("evidence-file", file)
+    // Append the file buffer with filename
+    formData.append("evidence-file", fileBuffer, {
+      filename: fileName,
+      contentType: this.getMimeType(fileName),
+    })
 
-    return this.client.request<ProvideEvidenceResponse>(
-      "POST",
+    return this.client.requestMultipart<ProvideEvidenceResponse>(
       `/v1/customer/disputes/${disputeId}/provide-evidence`,
       formData
     )
+  }
+
+  /**
+   * Get MIME type from filename
+   */
+  private getMimeType(fileName: string): string {
+    const ext = fileName.toLowerCase().split(".").pop()
+    const mimeTypes: Record<string, string> = {
+      pdf: "application/pdf",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      gif: "image/gif",
+      doc: "application/msword",
+      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }
+    return mimeTypes[ext || ""] || "application/octet-stream"
   }
 
   /**
@@ -358,18 +383,21 @@ export class PayPalDisputesAPI {
    */
   async sendMessage(
     disputeId: string,
-    file?: File | Blob
+    fileBuffer?: Buffer,
+    fileName?: string
   ): Promise<SendMessageResponse> {
     // According to PayPal docs, send-message uses multipart/form-data
     // with optional message_document file
     const formData = new FormData()
     
-    if (file) {
-      formData.append("message_document", file)
+    if (fileBuffer && fileName) {
+      formData.append("message_document", fileBuffer, {
+        filename: fileName,
+        contentType: this.getMimeType(fileName),
+      })
     }
 
-    return this.client.request<SendMessageResponse>(
-      "POST",
+    return this.client.requestMultipart<SendMessageResponse>(
       `/v1/customer/disputes/${disputeId}/send-message`,
       formData
     )

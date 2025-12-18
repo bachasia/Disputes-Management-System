@@ -71,8 +71,17 @@ export async function POST(
     const file = formData.get("message_document") as File | null
     const note = formData.get("note") as string | null
 
+    // Convert File to Buffer if provided
+    let fileBuffer: Buffer | undefined
+    let fileName: string | undefined
+    if (file) {
+      const arrayBuffer = await file.arrayBuffer()
+      fileBuffer = Buffer.from(arrayBuffer)
+      fileName = file.name
+    }
+
     // Send message via PayPal API (file is optional according to PayPal docs)
-    await disputesAPI.sendMessage(dispute.disputeId, file || undefined)
+    await disputesAPI.sendMessage(dispute.disputeId, fileBuffer, fileName)
 
     // Create history record
     await prisma.disputeHistory.create({
