@@ -320,7 +320,7 @@ export default function DisputesPage() {
                   })
                   .map(([currency, amount], index, array) => (
                     <div key={currency} className="flex items-baseline gap-1">
-                      <span className="text-2xl font-bold">
+                      <span className="text-xl font-bold">
                         {formatCurrency(amount, currency)}
                       </span>
                       {array.length > 1 && index < array.length - 1 && (
@@ -329,7 +329,7 @@ export default function DisputesPage() {
                     </div>
                   ))
               ) : (
-                <div className="text-2xl font-bold">
+                <div className="text-xl font-bold">
                   {formatCurrency(stats.totalAmount)}
                 </div>
               )}
