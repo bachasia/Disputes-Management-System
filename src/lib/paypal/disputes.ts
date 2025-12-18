@@ -316,17 +316,20 @@ export class PayPalDisputesAPI {
    * Provide evidence with file upload (multipart/form-data)
    * POST /v1/customer/disputes/{id}/provide-evidence
    * 
-   * PayPal format (from community):
+   * PayPal format:
    * - input: JSON with { evidences: [{ evidence_type, evidence_info, documents, notes }] }
    * - file1, file2, ...: Document files
    * 
-   * For PROOF_OF_FULFILLMENT: evidence_info.tracking_info is required
+   * Evidence types:
+   * - PROOF_OF_FULFILLMENT: Only for "Item Not Received" disputes, requires tracking_info
+   * - OTHER: For general evidence, works with all dispute types
+   * - PROOF_OF_REFUND, PROOF_OF_DELIVERY_SIGNATURE, etc.
    */
   async provideEvidenceWithFile(
     disputeId: string,
     fileBuffer: Buffer,
     fileName: string,
-    evidenceType: string = "PROOF_OF_FULFILLMENT",
+    evidenceType: string = "OTHER",
     trackingInfo?: { carrier_name: string; tracking_number: string },
     notes?: string
   ): Promise<ProvideEvidenceResponse> {
@@ -339,7 +342,7 @@ export class PayPalDisputesAPI {
       documents: [{ name: fileName }],
     }
     
-    // For PROOF_OF_FULFILLMENT, add tracking info if provided
+    // For PROOF_OF_FULFILLMENT, add tracking info (required for INR disputes)
     if (evidenceType === "PROOF_OF_FULFILLMENT" && trackingInfo) {
       evidence.evidence_info = {
         tracking_info: [{
@@ -371,6 +374,7 @@ export class PayPalDisputesAPI {
     })
 
     console.log(`[PayPalDisputesAPI] Uploading evidence file: ${fileName}, size: ${fileBuffer.length} bytes`)
+    console.log(`[PayPalDisputesAPI] Evidence type: ${evidenceType}`)
     console.log(`[PayPalDisputesAPI] Input data:`, JSON.stringify(inputData, null, 2))
 
     return this.client.requestMultipart<ProvideEvidenceResponse>(

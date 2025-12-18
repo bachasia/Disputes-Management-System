@@ -90,15 +90,23 @@ export async function POST(
       }
     }
 
-    // Determine evidence type
-    const getEvidenceType = (hasTracking: boolean): string => {
-      if (hasTracking) {
+    // Determine evidence type based on dispute reason
+    // PROOF_OF_FULFILLMENT is ONLY for "Item Not Received" (INR) disputes
+    // For "Item Not As Described" (SNAD) and other disputes, use OTHER
+    const getEvidenceType = (disputeReason: string | null, hasTracking: boolean): string => {
+      const reason = disputeReason?.toUpperCase() || ""
+      
+      // Only use PROOF_OF_FULFILLMENT for INR disputes with tracking info
+      if (reason.includes("NOT_RECEIVED") && hasTracking) {
         return "PROOF_OF_FULFILLMENT"
       }
+      
+      // For all other disputes (including SNAD), use OTHER
       return "OTHER"
     }
 
-    const evidenceType = getEvidenceType(!!trackingInfo)
+    const evidenceType = getEvidenceType(dispute.disputeReason, !!trackingInfo)
+    console.log(`[ProvideEvidence] Dispute reason: ${dispute.disputeReason}, Evidence type: ${evidenceType}`)
 
     // Provide evidence via PayPal API
     // Priority: If files are provided, use file upload method (multipart/form-data)
