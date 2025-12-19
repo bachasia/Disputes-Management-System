@@ -52,6 +52,7 @@ export default function DisputesPage() {
     open: 0,
     resolved: 0,
     totalAmount: 0,
+    totalAmountByCurrency: {} as Record<string, number>,
   })
 
   // Fetch stats
@@ -101,6 +102,7 @@ export default function DisputesPage() {
         open: data.open || 0,
         resolved: data.resolved || 0,
         totalAmount: data.totalAmount || 0,
+        totalAmountByCurrency: data.totalAmountByCurrency || {},
       })
     } catch (error) {
       console.error("Error fetching stats:", error)
@@ -158,11 +160,24 @@ export default function DisputesPage() {
     setFilters(newFilters)
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount)
+  const formatTotalAmount = () => {
+    const currencies = Object.keys(stats.totalAmountByCurrency)
+    
+    if (currencies.length === 0) {
+      return "0.00"
+    }
+
+    // Format each currency
+    const formatted = currencies.map((currency) => {
+      const amount = stats.totalAmountByCurrency[currency]
+      const formattedAmount = new Intl.NumberFormat("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount)
+      return `${formattedAmount} ${currency}`
+    })
+
+    return formatted.join(" • ")
   }
 
   const winRate = stats.resolved > 0 ? ((stats.resolved / stats.total) * 100).toFixed(1) : "0"
@@ -307,11 +322,25 @@ export default function DisputesPage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(stats.totalAmount)}
+            <div className="text-sm font-medium space-y-1">
+              {Object.keys(stats.totalAmountByCurrency).length > 0 ? (
+                Object.entries(stats.totalAmountByCurrency).map(([currency, amount]) => {
+                  const formattedAmount = new Intl.NumberFormat("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  }).format(amount)
+                  return (
+                    <div key={currency} className="whitespace-nowrap">
+                      {formattedAmount} {currency}
+                    </div>
+                  )
+                })
+              ) : (
+                <div className="text-muted-foreground">0.00</div>
+              )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Total dispute value
+            <p className="text-xs text-muted-foreground mt-2">
+              Total dispute value by currency
             </p>
           </CardContent>
         </Card>
