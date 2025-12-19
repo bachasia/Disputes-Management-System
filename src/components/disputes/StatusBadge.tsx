@@ -512,8 +512,16 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
     return <Badge variant="outline">Unknown</Badge>
   }
 
+  // Get status from rawData if available (more accurate from PayPal API)
+  let actualStatus = status
+  if (rawData && typeof rawData === "object") {
+    const raw = rawData as any
+    // Prefer dispute_state over status from rawData (PayPal API format)
+    actualStatus = raw.dispute_state || raw.status || status
+  }
+
   // Ensure status is a string before calling toUpperCase
-  const statusUpper = typeof status === "string" ? status.toUpperCase() : String(status || "").toUpperCase()
+  const statusUpper = typeof actualStatus === "string" ? actualStatus.toUpperCase() : String(actualStatus || "").toUpperCase()
 
   if (statusUpper === "OPEN") {
     return (
@@ -523,11 +531,24 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
     )
   }
   if (statusUpper.includes("WAITING")) {
+    // Debug logging to see actual status values
+    if (process.env.NODE_ENV === "development") {
+      console.log("[StatusBadge] WAITING status detected:", {
+        status,
+        statusUpper,
+        rawDataStatus: rawData && typeof rawData === "object" ? (rawData as any).status : null,
+        rawDataDisputeState: rawData && typeof rawData === "object" ? (rawData as any).dispute_state : null,
+      })
+    }
+    
     // Check for specific waiting statuses and show appropriate labels
+    // PayPal API uses: REQUIRED_ACTION, REQUIRED_OTHER_PARTY_ACTION, WAITING_FOR_SELLER_RESPONSE, etc.
     if (
       statusUpper.includes("WAITING_FOR_SELLER") ||
       statusUpper.includes("SELLER_RESPONSE") ||
-      statusUpper === "WAITING_FOR_SELLER_RESPONSE"
+      statusUpper === "WAITING_FOR_SELLER_RESPONSE" ||
+      statusUpper === "REQUIRED_ACTION" || // PayPal API: seller needs to respond
+      (statusUpper.includes("REQUIRED") && statusUpper.includes("ACTION") && !statusUpper.includes("OTHER"))
     ) {
       return (
         <Badge className="bg-orange-500 hover:bg-orange-600 text-white">
@@ -538,7 +559,9 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
     if (
       statusUpper.includes("WAITING_FOR_BUYER") ||
       statusUpper.includes("BUYER_RESPONSE") ||
-      statusUpper === "WAITING_FOR_BUYER_RESPONSE"
+      statusUpper === "WAITING_FOR_BUYER_RESPONSE" ||
+      statusUpper === "REQUIRED_OTHER_PARTY_ACTION" || // PayPal API: waiting for buyer/other party
+      (statusUpper.includes("REQUIRED") && statusUpper.includes("OTHER"))
     ) {
       return (
         <Badge className="bg-orange-500 hover:bg-orange-600 text-white">
