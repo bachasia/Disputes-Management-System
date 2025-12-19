@@ -113,16 +113,22 @@ function getActualOutcome(outcome: string | null | undefined, rawData: any): str
 
 /**
  * Check if dispute is refunded from outcome or rawData
- * Only check outcome explicitly, not refund_details (as it may exist in all disputes)
+ * Refunded can be detected from:
+ * - Explicit outcome: REFUNDED, REFUND, FULL_REFUND
+ * - Accept claim action (seller accepted = full refund)
+ * - Refund details in rawData
  */
 function isRefunded(outcome: string | null | undefined, rawData: any): boolean {
   // Check explicit outcome first
   if (outcome && typeof outcome === "string") {
     const outcomeUpper = outcome.toUpperCase().trim()
-    // Only match exact REFUNDED or REFUND, not partial matches
     if (
       outcomeUpper === "REFUNDED" ||
-      outcomeUpper === "REFUND"
+      outcomeUpper === "REFUND" ||
+      outcomeUpper === "FULL_REFUND" ||
+      outcomeUpper === "PARTIAL_REFUND" ||
+      outcomeUpper.includes("REFUNDED") ||
+      (outcomeUpper.includes("REFUND") && !outcomeUpper.includes("NOT"))
     ) {
       return true
     }
@@ -134,12 +140,30 @@ function isRefunded(outcome: string | null | undefined, rawData: any): boolean {
     const rawOutcome = raw.outcome || raw.dispute_outcome
     if (rawOutcome && typeof rawOutcome === "string") {
       const outcomeUpper = rawOutcome.toUpperCase().trim()
-      // Only match exact REFUNDED or REFUND, not partial matches
       if (
         outcomeUpper === "REFUNDED" ||
-        outcomeUpper === "REFUND"
+        outcomeUpper === "REFUND" ||
+        outcomeUpper === "FULL_REFUND" ||
+        outcomeUpper === "PARTIAL_REFUND" ||
+        outcomeUpper.includes("REFUNDED") ||
+        (outcomeUpper.includes("REFUND") && !outcomeUpper.includes("NOT"))
       ) {
         return true
+      }
+    }
+
+    // Check if dispute was resolved by accepting claim (full refund)
+    // This is indicated by status being RESOLVED and no specific outcome
+    // but we can check history or other indicators
+    if (raw.status === "RESOLVED" || raw.dispute_state === "RESOLVED") {
+      // If there's no explicit outcome but status is RESOLVED,
+      // and we have refund_details, it might be a refund
+      // But we should be careful - only if outcome is missing
+      if (!rawOutcome && raw.refund_details) {
+        // Check if there's an allowed refund amount
+        if (raw.refund_details.allowed_refund_amount) {
+          return true
+        }
       }
     }
   }
@@ -149,6 +173,10 @@ function isRefunded(outcome: string | null | undefined, rawData: any): boolean {
 
 /**
  * Check if dispute has offer accepted from outcome or rawData
+ * Offer accepted can be detected from:
+ * - Explicit outcome: OFFER_ACCEPTED, ACCEPTED_OFFER
+ * - Offer object in rawData with accepted status
+ * - Seller offered amount exists and dispute is resolved
  */
 function isOfferAccepted(outcome: string | null | undefined, rawData: any): boolean {
   if (outcome && typeof outcome === "string") {
@@ -157,7 +185,9 @@ function isOfferAccepted(outcome: string | null | undefined, rawData: any): bool
       outcomeUpper.includes("OFFER_ACCEPTED") ||
       outcomeUpper.includes("ACCEPTED_OFFER") ||
       outcomeUpper === "OFFER_ACCEPTED" ||
-      (outcomeUpper.includes("OFFER") && outcomeUpper.includes("ACCEPTED"))
+      outcomeUpper === "ACCEPTED_OFFER" ||
+      (outcomeUpper.includes("OFFER") && outcomeUpper.includes("ACCEPTED")) ||
+      (outcomeUpper.includes("ACCEPTED") && outcomeUpper.includes("OFFER"))
     ) {
       return true
     }
@@ -172,18 +202,48 @@ function isOfferAccepted(outcome: string | null | undefined, rawData: any): bool
         outcomeUpper.includes("OFFER_ACCEPTED") ||
         outcomeUpper.includes("ACCEPTED_OFFER") ||
         outcomeUpper === "OFFER_ACCEPTED" ||
-        (outcomeUpper.includes("OFFER") && outcomeUpper.includes("ACCEPTED"))
+        outcomeUpper === "ACCEPTED_OFFER" ||
+        (outcomeUpper.includes("OFFER") && outcomeUpper.includes("ACCEPTED")) ||
+        (outcomeUpper.includes("ACCEPTED") && outcomeUpper.includes("OFFER"))
       ) {
         return true
       }
     }
     
-    // Check if offer exists and has accepted status
+    // Check if offer exists and has accepted status or seller offered amount
     if (raw.offer) {
       const offer = raw.offer
+      
+      // Check offer status
       if (offer.status && typeof offer.status === "string") {
         const offerStatus = offer.status.toUpperCase().trim()
-        if (offerStatus === "ACCEPTED" || offerStatus.includes("ACCEPTED")) {
+        if (
+          offerStatus === "ACCEPTED" || 
+          offerStatus.includes("ACCEPTED") ||
+          offerStatus === "ACCEPTED_BY_BUYER"
+        ) {
+          return true
+        }
+      }
+      
+      // Check if seller_offered_amount exists and dispute is resolved
+      // This indicates an offer was made and likely accepted if resolved
+      if (
+        (raw.status === "RESOLVED" || raw.dispute_state === "RESOLVED") &&
+        offer.seller_offered_amount &&
+        offer.seller_offered_amount.value
+      ) {
+        // If there's a seller offered amount and dispute is resolved,
+        // and no explicit outcome indicating refund or win/loss,
+        // it's likely the offer was accepted
+        const hasOtherOutcome = rawOutcome && 
+          (rawOutcome.toUpperCase().includes("REFUND") ||
+           rawOutcome.toUpperCase().includes("WON") ||
+           rawOutcome.toUpperCase().includes("LOST") ||
+           rawOutcome.toUpperCase().includes("SELLER") ||
+           rawOutcome.toUpperCase().includes("BUYER"))
+        
+        if (!hasOtherOutcome) {
           return true
         }
       }
@@ -218,20 +278,26 @@ function getOutcomeDisplay(outcome: string | null | undefined): {
   }
 
   // Check for refunded (separate from buyer win)
-  // Only match exact REFUNDED or REFUND to avoid false positives
+  // Check this BEFORE buyer win to avoid false positives
   if (
     outcomeUpper === "REFUNDED" ||
-    outcomeUpper === "REFUND"
+    outcomeUpper === "REFUND" ||
+    outcomeUpper === "FULL_REFUND" ||
+    outcomeUpper === "PARTIAL_REFUND" ||
+    outcomeUpper.includes("REFUNDED") ||
+    (outcomeUpper.includes("REFUND") && !outcomeUpper.includes("NOT"))
   ) {
     return { type: "refunded", label: "Refunded" }
   }
 
-  // Check for offer accepted
+  // Check for offer accepted (before checking win/loss)
   if (
     outcomeUpper.includes("OFFER_ACCEPTED") ||
     outcomeUpper.includes("ACCEPTED_OFFER") ||
     outcomeUpper === "OFFER_ACCEPTED" ||
-    (outcomeUpper.includes("OFFER") && outcomeUpper.includes("ACCEPTED"))
+    outcomeUpper === "ACCEPTED_OFFER" ||
+    (outcomeUpper.includes("OFFER") && outcomeUpper.includes("ACCEPTED")) ||
+    (outcomeUpper.includes("ACCEPTED") && outcomeUpper.includes("OFFER"))
   ) {
     return { type: "offer_accepted", label: "Offer Accepted" }
   }
@@ -335,6 +401,9 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
   
   // For RESOLVED or CLOSED status, show Won/Lost/Cancelled/Refunded/Offer Accepted if outcome is available
   if (statusUpper === "RESOLVED" || statusUpper === "CLOSED") {
+    // Extract actual outcome from disputeOutcome or rawData FIRST
+    const actualOutcome = getActualOutcome(outcome, rawData)
+    
     // First check if rawData indicates cancelled (even without explicit outcome)
     if (isCancelledFromRawData(rawData)) {
       return (
@@ -345,8 +414,9 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
       )
     }
 
-    // Check for refunded (from outcome or rawData)
-    if (isRefunded(outcome, rawData)) {
+    // Check for refunded (from outcome or rawData) - check BEFORE won/lost
+    // Use both outcome and actualOutcome for better detection
+    if (isRefunded(outcome, rawData) || isRefunded(actualOutcome, rawData)) {
       return (
         <Badge className="bg-purple-500 hover:bg-purple-600 text-white gap-1">
           <DollarSign className="h-3 w-3" />
@@ -355,8 +425,9 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
       )
     }
 
-    // Check for offer accepted (from outcome or rawData)
-    if (isOfferAccepted(outcome, rawData)) {
+    // Check for offer accepted (from outcome or rawData) - check BEFORE won/lost
+    // Use both outcome and actualOutcome for better detection
+    if (isOfferAccepted(outcome, rawData) || isOfferAccepted(actualOutcome, rawData)) {
       return (
         <Badge className="bg-blue-500 hover:bg-blue-600 text-white gap-1">
           <CheckCircle2 className="h-3 w-3" />
@@ -365,8 +436,7 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
       )
     }
 
-    // Extract actual outcome from disputeOutcome or rawData
-    const actualOutcome = getActualOutcome(outcome, rawData)
+    // Now check for Won/Lost/Cancelled using outcome display
     const { type, label } = getOutcomeDisplay(actualOutcome)
     
     // If we have a valid outcome, show Won/Lost/Cancelled/Refunded/Offer Accepted badge
