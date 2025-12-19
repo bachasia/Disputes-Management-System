@@ -322,21 +322,22 @@ export default function DisputesPage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-sm font-medium space-y-1">
+            <div className="text-sm font-bold whitespace-nowrap">
               {Object.keys(stats.totalAmountByCurrency).length > 0 ? (
-                Object.entries(stats.totalAmountByCurrency).map(([currency, amount]) => {
+                Object.entries(stats.totalAmountByCurrency).map(([currency, amount], index, array) => {
                   const formattedAmount = new Intl.NumberFormat("en-US", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   }).format(amount)
                   return (
-                    <div key={currency} className="whitespace-nowrap">
+                    <span key={currency}>
                       {formattedAmount} {currency}
-                    </div>
+                      {index < array.length - 1 && <span className="mx-1">•</span>}
+                    </span>
                   )
                 })
               ) : (
-                <div className="text-muted-foreground">0.00</div>
+                <span className="text-muted-foreground">0.00</span>
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-2">
