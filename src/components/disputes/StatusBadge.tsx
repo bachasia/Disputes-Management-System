@@ -79,7 +79,7 @@ function getActualOutcome(outcome: string | null | undefined, rawData: any): str
   if (rawData && typeof rawData === "object") {
     const raw = rawData as any
 
-    // Check for outcome field in rawData (most common)
+    // Check for outcome field in rawData (most common - top level)
     if (raw.outcome) {
       const outcomeUpper = safeToUpper(raw.outcome)
       if (
@@ -91,19 +91,31 @@ function getActualOutcome(outcome: string | null | undefined, rawData: any): str
       }
     }
 
-    // Check for dispute_outcome field (alternative format)
+    // Check for dispute_outcome.outcome_code (PayPal API format)
     if (raw.dispute_outcome) {
-      const outcomeUpper = safeToUpper(raw.dispute_outcome)
-      if (
-        outcomeUpper &&
-        outcomeUpper !== "RESOLVED" &&
-        outcomeUpper !== "CLOSED"
-      ) {
-        return typeof raw.dispute_outcome === "string" ? raw.dispute_outcome : String(raw.dispute_outcome)
+      if (typeof raw.dispute_outcome === "object" && raw.dispute_outcome.outcome_code) {
+        const outcomeCode = raw.dispute_outcome.outcome_code
+        const outcomeUpper = safeToUpper(outcomeCode)
+        if (
+          outcomeUpper &&
+          outcomeUpper !== "RESOLVED" &&
+          outcomeUpper !== "CLOSED"
+        ) {
+          return typeof outcomeCode === "string" ? outcomeCode : String(outcomeCode)
+        }
+      } else if (typeof raw.dispute_outcome === "string") {
+        const outcomeUpper = safeToUpper(raw.dispute_outcome)
+        if (
+          outcomeUpper &&
+          outcomeUpper !== "RESOLVED" &&
+          outcomeUpper !== "CLOSED"
+        ) {
+          return raw.dispute_outcome
+        }
       }
     }
 
-    // Check for other possible outcome indicators
+    // Check adjudications array (last adjudication is most recent)
     if (
       raw.adjudications &&
       Array.isArray(raw.adjudications) &&
@@ -195,6 +207,22 @@ function isRefunded(outcome: string | null | undefined, rawData: any): boolean {
           ) {
             return true
           }
+        }
+      }
+    }
+
+    // Check dispute_outcome.amount_refunded (PayPal API format)
+    if (raw.dispute_outcome && typeof raw.dispute_outcome === "object") {
+      const disputeOutcome = raw.dispute_outcome
+      if (disputeOutcome.amount_refunded) {
+        const amountRefunded = disputeOutcome.amount_refunded
+        // Check if amount_refunded has a value > 0
+        if (
+          (typeof amountRefunded === "object" && amountRefunded.value && parseFloat(amountRefunded.value) > 0) ||
+          (typeof amountRefunded === "string" && parseFloat(amountRefunded) > 0) ||
+          (typeof amountRefunded === "number" && amountRefunded > 0)
+        ) {
+          return true
         }
       }
     }
@@ -322,6 +350,16 @@ function isOfferAccepted(outcome: string | null | undefined, rawData: any): bool
     if (raw.offer) {
       const offer = raw.offer
       
+      // Check offer.history for ACCEPTED event (PayPal API format)
+      if (offer.history && Array.isArray(offer.history)) {
+        const hasAcceptedEvent = offer.history.some(
+          (h: any) => h.event_type && safeToUpper(h.event_type) === "ACCEPTED"
+        )
+        if (hasAcceptedEvent) {
+          return true
+        }
+      }
+      
       // Check offer status
       if (offer.status) {
         const offerStatus = safeToUpper(offer.status)
@@ -353,14 +391,6 @@ function isOfferAccepted(outcome: string | null | undefined, rawData: any): bool
           return true
         }
       }
-      
-      // Check if seller_offered_amount exists and dispute is resolved
-      // ONLY consider it offer accepted if:
-      // 1. Status is explicitly ACCEPTED (already checked above)
-      // 2. OR there's buyer_offered_amount (buyer accepted seller's offer)
-      // 3. OR there's explicit outcome indicating offer accepted
-      // DO NOT assume offer accepted just because seller_offered_amount exists and dispute is resolved
-      // This could be Won/Lost instead
     }
   }
 
@@ -408,7 +438,9 @@ function getOutcomeDisplay(outcome: string | null | undefined): {
   }
 
   // Check for offer accepted (before checking win/loss)
+  // PayPal API uses "ACCEPTED" for offer accepted
   if (
+    outcomeUpper === "ACCEPTED" ||
     outcomeUpper.includes("OFFER_ACCEPTED") ||
     outcomeUpper.includes("ACCEPTED_OFFER") ||
     outcomeUpper === "OFFER_ACCEPTED" ||
@@ -420,13 +452,16 @@ function getOutcomeDisplay(outcome: string | null | undefined): {
   }
 
   // Check for buyer win indicators (if buyer won, seller lost)
+  // PayPal API uses: RESOLVED_BUYER_FAVOUR, LOST, PAID_OUT
   // Exclude REFUNDED as it's now a separate status
   const isBuyerWin =
+    outcomeUpper === "PAID_OUT" || // PayPal API: money paid to buyer
+    outcomeUpper === "LOST" || // Simplified: seller lost
     outcomeUpper.includes("PAYOUT_TO_BUYER") ||
     outcomeUpper.includes("BUYER_WIN") ||
-    outcomeUpper.includes("RESOLVED_BUYER_FAVOR") ||
+    outcomeUpper === "RESOLVED_BUYER_FAVOR" ||
+    outcomeUpper === "RESOLVED_BUYER_FAVOUR" ||
     outcomeUpper.includes("RESOLVED_IN_BUYER_FAVOR") ||
-    outcomeUpper.includes("RESOLVED_BUYER_FAVOUR") ||
     outcomeUpper.includes("RESOLVED_IN_BUYER_FAVOUR") ||
     outcomeUpper.includes("BUYER_FAVOR") ||
     outcomeUpper.includes("BUYER_FAVOUR") ||
@@ -436,7 +471,6 @@ function getOutcomeDisplay(outcome: string | null | undefined): {
       (outcomeUpper.includes("WON") ||
         outcomeUpper.includes("FAVOR") ||
         outcomeUpper.includes("FAVOUR"))) ||
-    outcomeUpper === "LOST" ||
     outcomeUpper === "BUYER"
 
   if (isBuyerWin) {
@@ -444,9 +478,9 @@ function getOutcomeDisplay(outcome: string | null | undefined): {
   }
 
   // Check for seller win indicators
+  // PayPal API uses: RESOLVED_SELLER_FAVOUR, WON
   const isSellerWin =
-    outcomeUpper.includes("SELLER") ||
-    outcomeUpper === "WON" ||
+    outcomeUpper === "WON" || // Simplified: seller won
     outcomeUpper === "RESOLVED_SELLER_FAVOR" ||
     outcomeUpper === "RESOLVED_SELLER_FAVOUR" ||
     outcomeUpper === "SELLER_WIN" ||
@@ -459,6 +493,7 @@ function getOutcomeDisplay(outcome: string | null | undefined): {
     outcomeUpper === "SELLER_FAVORABLE" ||
     outcomeUpper === "FAVORABLE_TO_SELLER" ||
     outcomeUpper === "SELLER_WON" ||
+    outcomeUpper.includes("SELLER") ||
     // Check for negative buyer indicators (if buyer lost, seller won)
     (outcomeUpper.includes("BUYER") &&
       (outcomeUpper.includes("LOST") ||
@@ -578,20 +613,32 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
     let outcomeToCheck = actualOutcome || outcome
     if (!outcomeToCheck && rawData && typeof rawData === "object") {
       const raw = rawData as any
-      outcomeToCheck = raw.outcome || raw.dispute_outcome || null
+      // Check outcome field first
+      outcomeToCheck = raw.outcome || null
+      // Then check dispute_outcome.outcome_code (PayPal API format)
+      if (!outcomeToCheck && raw.dispute_outcome) {
+        if (typeof raw.dispute_outcome === "object" && raw.dispute_outcome.outcome_code) {
+          outcomeToCheck = raw.dispute_outcome.outcome_code
+        } else if (typeof raw.dispute_outcome === "string") {
+          outcomeToCheck = raw.dispute_outcome
+        }
+      }
     }
     
     const { type, label } = getOutcomeDisplay(outcomeToCheck)
     
     // Debug logging for outcome display
     if (process.env.NODE_ENV === "development") {
+      const raw = rawData && typeof rawData === "object" ? (rawData as any) : null
       console.log("[StatusBadge] getOutcomeDisplay result:", {
         actualOutcome,
         outcome,
         outcomeToCheck,
         type,
         label,
-        rawDataOutcome: rawData && typeof rawData === "object" ? (rawData as any).outcome : null,
+        rawDataOutcome: raw?.outcome || null,
+        rawDataDisputeOutcome: raw?.dispute_outcome || null,
+        rawDataDisputeOutcomeCode: raw?.dispute_outcome?.outcome_code || null,
       })
     }
     
