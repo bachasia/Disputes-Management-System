@@ -113,36 +113,34 @@ function getActualOutcome(outcome: string | null | undefined, rawData: any): str
 
 /**
  * Check if dispute is refunded from outcome or rawData
+ * Only check outcome explicitly, not refund_details (as it may exist in all disputes)
  */
 function isRefunded(outcome: string | null | undefined, rawData: any): boolean {
+  // Check explicit outcome first
   if (outcome && typeof outcome === "string") {
     const outcomeUpper = outcome.toUpperCase().trim()
+    // Only match exact REFUNDED or REFUND, not partial matches
     if (
       outcomeUpper === "REFUNDED" ||
-      outcomeUpper === "REFUND" ||
-      outcomeUpper.includes("REFUND")
+      outcomeUpper === "REFUND"
     ) {
       return true
     }
   }
 
+  // Check rawData outcome
   if (rawData && typeof rawData === "object") {
     const raw = rawData as any
     const rawOutcome = raw.outcome || raw.dispute_outcome
     if (rawOutcome && typeof rawOutcome === "string") {
       const outcomeUpper = rawOutcome.toUpperCase().trim()
+      // Only match exact REFUNDED or REFUND, not partial matches
       if (
         outcomeUpper === "REFUNDED" ||
-        outcomeUpper === "REFUND" ||
-        outcomeUpper.includes("REFUND")
+        outcomeUpper === "REFUND"
       ) {
         return true
       }
-    }
-    
-    // Check if refund_details exists (indicates refund was processed)
-    if (raw.refund_details || raw.refund_ids) {
-      return true
     }
   }
 
@@ -220,10 +218,10 @@ function getOutcomeDisplay(outcome: string | null | undefined): {
   }
 
   // Check for refunded (separate from buyer win)
+  // Only match exact REFUNDED or REFUND to avoid false positives
   if (
     outcomeUpper === "REFUNDED" ||
-    outcomeUpper === "REFUND" ||
-    outcomeUpper.includes("REFUND")
+    outcomeUpper === "REFUND"
   ) {
     return { type: "refunded", label: "Refunded" }
   }
