@@ -40,6 +40,7 @@ interface DisputeFiltersProps {
 const STATUS_OPTIONS = [
   { value: "OPEN", label: "Open" },
   { value: "WAITING_FOR_SELLER_RESPONSE", label: "Waiting for Seller Response" },
+  { value: "WAITING_FOR_BUYER_RESPONSE", label: "Waiting for Buyer Response" },
   { value: "UNDER_REVIEW", label: "Under Review" },
   { value: "RESOLVED", label: "Resolved" },
 ]
