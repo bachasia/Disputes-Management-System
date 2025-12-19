@@ -79,6 +79,8 @@ export async function GET(request: NextRequest) {
         disputeOutcome: true,
         disputeAmount: true,
         disputeCurrency: true,
+        resolvedAt: true, // Add resolvedAt to check resolved status
+        rawData: true, // Add rawData to extract outcome if needed
       },
     })
 
@@ -93,28 +95,176 @@ export async function GET(request: NextRequest) {
           d.disputeStatus.toUpperCase().includes("REVIEW"))
     ).length
 
-    const resolved = disputes.filter(
-      (d) =>
-        d.disputeStatus &&
-        (d.disputeStatus.toUpperCase() === "RESOLVED" ||
-          d.disputeStatus.toUpperCase() === "CLOSED")
-    )
+    // Consider disputes resolved if:
+    // 1. Status is RESOLVED or CLOSED, OR
+    // 2. resolvedAt field is set (even if status is not explicitly RESOLVED)
+    const resolved = disputes.filter((d) => {
+      const status = d.disputeStatus?.toUpperCase() || ""
+      const isStatusResolved = status === "RESOLVED" || status === "CLOSED"
+      const hasResolvedAt = !!d.resolvedAt
+      return isStatusResolved || hasResolvedAt
+    })
 
     const resolvedCount = resolved.length
 
-    // Calculate won disputes - only count resolved disputes with seller-favorable outcome
-    const won = resolved.filter((d) => {
-      if (!d.disputeOutcome) return false
-      const outcome = d.disputeOutcome.toUpperCase()
+    // Helper function to extract actual outcome from dispute
+    // This matches the logic in analytics/overview/route.ts
+    const getActualOutcome = (dispute: any): string | null => {
+      // If outcome exists and is not just "RESOLVED" or "CLOSED", use it
+      if (
+        dispute.disputeOutcome &&
+        dispute.disputeOutcome.trim() !== "" &&
+        dispute.disputeOutcome.toUpperCase() !== "RESOLVED" &&
+        dispute.disputeOutcome.toUpperCase() !== "CLOSED"
+      ) {
+        return dispute.disputeOutcome
+      }
+
+      // Try to extract from rawData if available
+      if (dispute.rawData && typeof dispute.rawData === "object") {
+        const raw = dispute.rawData as any
+
+        // Check for outcome field in rawData (most common)
+        if (
+          raw.outcome &&
+          typeof raw.outcome === "string" &&
+          raw.outcome.trim() !== "" &&
+          raw.outcome.toUpperCase() !== "RESOLVED" &&
+          raw.outcome.toUpperCase() !== "CLOSED"
+        ) {
+          return raw.outcome
+        }
+
+        // Check for dispute_outcome field (alternative format)
+        if (
+          raw.dispute_outcome &&
+          typeof raw.dispute_outcome === "string" &&
+          raw.dispute_outcome.trim() !== "" &&
+          raw.dispute_outcome.toUpperCase() !== "RESOLVED" &&
+          raw.dispute_outcome.toUpperCase() !== "CLOSED"
+        ) {
+          return raw.dispute_outcome
+        }
+
+        // Check for other possible outcome indicators
+        // Some PayPal API responses might have outcome in different locations
+        if (
+          raw.adjudications &&
+          Array.isArray(raw.adjudications) &&
+          raw.adjudications.length > 0
+        ) {
+          const lastAdjudication =
+            raw.adjudications[raw.adjudications.length - 1]
+          if (
+            lastAdjudication.type &&
+            lastAdjudication.type.toUpperCase() !== "RESOLVED"
+          ) {
+            return lastAdjudication.type
+          }
+        }
+      }
+
+      return null
+    }
+
+    // Helper function to determine outcome type (won/lost/cancelled)
+    const getOutcomeType = (
+      outcome: string | null
+    ): "won" | "lost" | "cancelled" | null => {
+      if (!outcome || outcome.trim() === "") {
+        return null
+      }
+
+      const outcomeUpper = outcome.toUpperCase().trim()
+
+      // Check for cancelled/withdrawn first
+      if (
+        outcomeUpper.includes("CANCEL") ||
+        outcomeUpper.includes("WITHDRAWN") ||
+        outcomeUpper === "CANCELLED" ||
+        outcomeUpper === "CANCELED"
+      ) {
+        return "cancelled"
+      }
+
+      // Check for buyer win indicators (if buyer won, seller lost)
+      const isBuyerWin =
+        outcomeUpper.includes("PAYOUT_TO_BUYER") ||
+        outcomeUpper.includes("BUYER_WIN") ||
+        outcomeUpper.includes("RESOLVED_BUYER_FAVOR") ||
+        outcomeUpper.includes("RESOLVED_IN_BUYER_FAVOR") ||
+        outcomeUpper.includes("RESOLVED_BUYER_FAVOUR") ||
+        outcomeUpper.includes("RESOLVED_IN_BUYER_FAVOUR") ||
+        outcomeUpper.includes("BUYER_FAVOR") ||
+        outcomeUpper.includes("BUYER_FAVOUR") ||
+        outcomeUpper.includes("FAVOR_BUYER") ||
+        outcomeUpper.includes("FAVOUR_BUYER") ||
+        outcomeUpper === "REFUNDED" ||
+        outcomeUpper === "REFUND" ||
+        (outcomeUpper.includes("BUYER") &&
+          (outcomeUpper.includes("WON") ||
+            outcomeUpper.includes("FAVOR") ||
+            outcomeUpper.includes("FAVOUR"))) ||
+        outcomeUpper === "LOST" ||
+        outcomeUpper === "BUYER"
+
+      if (isBuyerWin) {
+        return "lost"
+      }
+
       // Check for seller win indicators
-      return (
-        outcome.includes("SELLER") ||
-        outcome === "WON" ||
-        outcome === "RESOLVED_SELLER_FAVOR" ||
-        outcome === "SELLER_WIN" ||
-        outcome === "RESOLVED_IN_SELLER_FAVOR"
-      )
-    }).length
+      const isSellerWin =
+        outcomeUpper.includes("SELLER") ||
+        outcomeUpper === "WON" ||
+        outcomeUpper === "RESOLVED_SELLER_FAVOR" ||
+        outcomeUpper === "RESOLVED_SELLER_FAVOUR" ||
+        outcomeUpper === "SELLER_WIN" ||
+        outcomeUpper === "RESOLVED_IN_SELLER_FAVOR" ||
+        outcomeUpper === "RESOLVED_IN_SELLER_FAVOUR" ||
+        outcomeUpper.includes("SELLER_FAVOR") ||
+        outcomeUpper.includes("SELLER_FAVOUR") ||
+        outcomeUpper.includes("FAVOR_SELLER") ||
+        outcomeUpper.includes("FAVOUR_SELLER") ||
+        outcomeUpper === "SELLER_FAVORABLE" ||
+        outcomeUpper === "FAVORABLE_TO_SELLER" ||
+        outcomeUpper === "SELLER_WON" ||
+        // Check for negative buyer indicators (if buyer lost, seller won)
+        (outcomeUpper.includes("BUYER") &&
+          (outcomeUpper.includes("LOST") ||
+            outcomeUpper.includes("DENIED") ||
+            outcomeUpper.includes("REJECTED")))
+
+      if (isSellerWin) {
+        return "won"
+      }
+
+      return null
+    }
+
+    // Calculate won, lost, and cancelled disputes
+    let won = 0
+    let lost = 0
+    let cancelled = 0
+
+    resolved.forEach((d) => {
+      const actualOutcome = getActualOutcome(d)
+      const outcomeType = getOutcomeType(actualOutcome)
+
+      switch (outcomeType) {
+        case "won":
+          won++
+          break
+        case "lost":
+          lost++
+          break
+        case "cancelled":
+          cancelled++
+          break
+        default:
+          // Unknown outcome - don't count in any category
+          break
+      }
+    })
 
     const winRate = resolvedCount > 0 ? (won / resolvedCount) * 100 : 0
 
@@ -147,6 +297,9 @@ export async function GET(request: NextRequest) {
         total,
         open,
         resolved: resolvedCount,
+        won,
+        lost,
+        cancelled,
         winRate: Math.round(winRate * 10) / 10, // Round to 1 decimal
         totalAmount,
         totalAmountByCurrency,

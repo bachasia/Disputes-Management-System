@@ -25,7 +25,6 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2 } from "lucide-react"
 import { StatusBadge } from "@/components/disputes/StatusBadge"
 import { ReasonBadge } from "@/components/disputes/ReasonBadge"
-import { OutcomeBadge } from "@/components/disputes/OutcomeBadge"
 import { FullRefundModal } from "@/components/disputes/AcceptClaimModal"
 import { ProvideEvidenceModal } from "@/components/disputes/ProvideEvidenceModal"
 import { SendMessageModal } from "@/components/disputes/SendMessageModal"
@@ -210,10 +209,9 @@ export default function DisputeDetailPage() {
                 </a>
               </div>
               <div className="flex items-center gap-3">
-                <StatusBadge status={dispute.disputeStatus} />
-                <OutcomeBadge 
-                  outcome={dispute.disputeOutcome} 
+                <StatusBadge 
                   status={dispute.disputeStatus} 
+                  outcome={dispute.disputeOutcome}
                 />
                 <ReasonBadge reason={dispute.disputeReason} />
               </div>

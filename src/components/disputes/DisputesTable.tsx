@@ -18,7 +18,6 @@ import { cn } from "@/lib/utils"
 import type { DisputeFilters } from "./DisputeFilters"
 import { StatusBadge } from "./StatusBadge"
 import { ReasonBadge } from "./ReasonBadge"
-import { OutcomeBadge } from "./OutcomeBadge"
 
 interface Dispute {
   id: string
@@ -298,10 +297,9 @@ export function DisputesTable({ accountId, filters }: DisputesTableProps) {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <StatusBadge status={dispute.disputeStatus} />
-                      <OutcomeBadge 
-                        outcome={dispute.disputeOutcome} 
+                      <StatusBadge 
                         status={dispute.disputeStatus} 
+                        outcome={dispute.disputeOutcome}
                       />
                     </div>
                   </TableCell>
