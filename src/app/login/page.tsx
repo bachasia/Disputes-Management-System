@@ -250,16 +250,6 @@ function LoginForm() {
               )}
             </Button>
           </form>
-
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            <p className="text-xs">Default credentials (change after first login):</p>
-            <p className="mt-2 font-mono text-xs break-all">
-              Admin: admin@example.com / Admin@123456
-            </p>
-            <p className="font-mono text-xs break-all">
-              User: user@example.com / User@123456
-            </p>
-          </div>
         </CardContent>
       </Card>
       </div>
