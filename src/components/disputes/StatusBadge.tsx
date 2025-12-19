@@ -1,7 +1,7 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
-import { Trophy, XCircle, Ban } from "lucide-react"
+import { Trophy, XCircle, Ban, CheckCircle2, DollarSign } from "lucide-react"
 
 interface StatusBadgeProps {
   status: string | null
@@ -112,11 +112,95 @@ function getActualOutcome(outcome: string | null | undefined, rawData: any): str
 }
 
 /**
+ * Check if dispute is refunded from outcome or rawData
+ */
+function isRefunded(outcome: string | null | undefined, rawData: any): boolean {
+  if (outcome && typeof outcome === "string") {
+    const outcomeUpper = outcome.toUpperCase().trim()
+    if (
+      outcomeUpper === "REFUNDED" ||
+      outcomeUpper === "REFUND" ||
+      outcomeUpper.includes("REFUND")
+    ) {
+      return true
+    }
+  }
+
+  if (rawData && typeof rawData === "object") {
+    const raw = rawData as any
+    const rawOutcome = raw.outcome || raw.dispute_outcome
+    if (rawOutcome && typeof rawOutcome === "string") {
+      const outcomeUpper = rawOutcome.toUpperCase().trim()
+      if (
+        outcomeUpper === "REFUNDED" ||
+        outcomeUpper === "REFUND" ||
+        outcomeUpper.includes("REFUND")
+      ) {
+        return true
+      }
+    }
+    
+    // Check if refund_details exists (indicates refund was processed)
+    if (raw.refund_details || raw.refund_ids) {
+      return true
+    }
+  }
+
+  return false
+}
+
+/**
+ * Check if dispute has offer accepted from outcome or rawData
+ */
+function isOfferAccepted(outcome: string | null | undefined, rawData: any): boolean {
+  if (outcome && typeof outcome === "string") {
+    const outcomeUpper = outcome.toUpperCase().trim()
+    if (
+      outcomeUpper.includes("OFFER_ACCEPTED") ||
+      outcomeUpper.includes("ACCEPTED_OFFER") ||
+      outcomeUpper === "OFFER_ACCEPTED" ||
+      (outcomeUpper.includes("OFFER") && outcomeUpper.includes("ACCEPTED"))
+    ) {
+      return true
+    }
+  }
+
+  if (rawData && typeof rawData === "object") {
+    const raw = rawData as any
+    const rawOutcome = raw.outcome || raw.dispute_outcome
+    if (rawOutcome && typeof rawOutcome === "string") {
+      const outcomeUpper = rawOutcome.toUpperCase().trim()
+      if (
+        outcomeUpper.includes("OFFER_ACCEPTED") ||
+        outcomeUpper.includes("ACCEPTED_OFFER") ||
+        outcomeUpper === "OFFER_ACCEPTED" ||
+        (outcomeUpper.includes("OFFER") && outcomeUpper.includes("ACCEPTED"))
+      ) {
+        return true
+      }
+    }
+    
+    // Check if offer exists and has accepted status
+    if (raw.offer) {
+      const offer = raw.offer
+      if (offer.status && typeof offer.status === "string") {
+        const offerStatus = offer.status.toUpperCase().trim()
+        if (offerStatus === "ACCEPTED" || offerStatus.includes("ACCEPTED")) {
+          return true
+        }
+      }
+    }
+  }
+
+  return false
+}
+
+/**
  * Determine the display outcome from PayPal outcome string
  * This matches the logic in stats API for consistency
  */
 function getOutcomeDisplay(outcome: string | null | undefined): {
-  type: "won" | "lost" | "cancelled" | null
+  type: "won" | "lost" | "cancelled" | "refunded" | "offer_accepted" | null
   label: string
 } {
   if (!outcome || typeof outcome !== "string" || outcome.trim() === "") {
@@ -135,7 +219,27 @@ function getOutcomeDisplay(outcome: string | null | undefined): {
     return { type: "cancelled", label: "Cancelled" }
   }
 
+  // Check for refunded (separate from buyer win)
+  if (
+    outcomeUpper === "REFUNDED" ||
+    outcomeUpper === "REFUND" ||
+    outcomeUpper.includes("REFUND")
+  ) {
+    return { type: "refunded", label: "Refunded" }
+  }
+
+  // Check for offer accepted
+  if (
+    outcomeUpper.includes("OFFER_ACCEPTED") ||
+    outcomeUpper.includes("ACCEPTED_OFFER") ||
+    outcomeUpper === "OFFER_ACCEPTED" ||
+    (outcomeUpper.includes("OFFER") && outcomeUpper.includes("ACCEPTED"))
+  ) {
+    return { type: "offer_accepted", label: "Offer Accepted" }
+  }
+
   // Check for buyer win indicators (if buyer won, seller lost)
+  // Exclude REFUNDED as it's now a separate status
   const isBuyerWin =
     outcomeUpper.includes("PAYOUT_TO_BUYER") ||
     outcomeUpper.includes("BUYER_WIN") ||
@@ -147,8 +251,6 @@ function getOutcomeDisplay(outcome: string | null | undefined): {
     outcomeUpper.includes("BUYER_FAVOUR") ||
     outcomeUpper.includes("FAVOR_BUYER") ||
     outcomeUpper.includes("FAVOUR_BUYER") ||
-    outcomeUpper === "REFUNDED" ||
-    outcomeUpper === "REFUND" ||
     (outcomeUpper.includes("BUYER") &&
       (outcomeUpper.includes("WON") ||
         outcomeUpper.includes("FAVOR") ||
@@ -233,7 +335,7 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
     )
   }
   
-  // For RESOLVED or CLOSED status, show Won/Lost/Cancelled if outcome is available
+  // For RESOLVED or CLOSED status, show Won/Lost/Cancelled/Refunded/Offer Accepted if outcome is available
   if (statusUpper === "RESOLVED" || statusUpper === "CLOSED") {
     // First check if rawData indicates cancelled (even without explicit outcome)
     if (isCancelledFromRawData(rawData)) {
@@ -245,11 +347,31 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
       )
     }
 
+    // Check for refunded (from outcome or rawData)
+    if (isRefunded(outcome, rawData)) {
+      return (
+        <Badge className="bg-purple-500 hover:bg-purple-600 text-white gap-1">
+          <DollarSign className="h-3 w-3" />
+          Refunded
+        </Badge>
+      )
+    }
+
+    // Check for offer accepted (from outcome or rawData)
+    if (isOfferAccepted(outcome, rawData)) {
+      return (
+        <Badge className="bg-blue-500 hover:bg-blue-600 text-white gap-1">
+          <CheckCircle2 className="h-3 w-3" />
+          Offer Accepted
+        </Badge>
+      )
+    }
+
     // Extract actual outcome from disputeOutcome or rawData
     const actualOutcome = getActualOutcome(outcome, rawData)
     const { type, label } = getOutcomeDisplay(actualOutcome)
     
-    // If we have a valid outcome, show Won/Lost/Cancelled badge
+    // If we have a valid outcome, show Won/Lost/Cancelled/Refunded/Offer Accepted badge
     if (type === "won") {
       return (
         <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1">
@@ -272,6 +394,24 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
       return (
         <Badge className="bg-gray-500 hover:bg-gray-600 text-white gap-1">
           <Ban className="h-3 w-3" />
+          {label}
+        </Badge>
+      )
+    }
+
+    if (type === "refunded") {
+      return (
+        <Badge className="bg-purple-500 hover:bg-purple-600 text-white gap-1">
+          <DollarSign className="h-3 w-3" />
+          {label}
+        </Badge>
+      )
+    }
+
+    if (type === "offer_accepted") {
+      return (
+        <Badge className="bg-blue-500 hover:bg-blue-600 text-white gap-1">
+          <CheckCircle2 className="h-3 w-3" />
           {label}
         </Badge>
       )
