@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { AccountCard } from "@/components/accounts/AccountCard"
 import { AccountFormModal } from "@/components/accounts/AccountFormModal"
 import { DeleteConfirmDialog } from "@/components/accounts/DeleteConfirmDialog"
+import { HardDeleteConfirmDialog } from "@/components/accounts/HardDeleteConfirmDialog"
 import { toast } from "sonner"
 
 interface Account {
@@ -28,6 +29,7 @@ export default function AccountsPage() {
   const [loading, setLoading] = React.useState(true)
   const [formModalOpen, setFormModalOpen] = React.useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
+  const [hardDeleteDialogOpen, setHardDeleteDialogOpen] = React.useState(false)
   const [selectedAccount, setSelectedAccount] = React.useState<Account | null>(null)
   const [syncLoading, setSyncLoading] = React.useState<string | null>(null)
   const [testingAccount, setTestingAccount] = React.useState<string | null>(null)
@@ -143,6 +145,61 @@ export default function AccountsPage() {
       const errorMessage = error instanceof Error ? error.message : "Failed to deactivate account"
       toast.error(errorMessage)
       throw error
+    }
+  }
+
+  // Handle toggle active status
+  const handleToggleActive = async (accountId: string) => {
+    try {
+      const response = await fetch(`/api/accounts/${accountId}/toggle-active`, {
+        method: "POST",
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || "Failed to toggle account status")
+      }
+
+      const data = await response.json()
+      await fetchAccounts()
+      toast.success(data.message || "Account status updated successfully")
+    } catch (error) {
+      console.error("Error toggling account status:", error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to toggle account status"
+      toast.error(errorMessage)
+    }
+  }
+
+  // Handle hard delete account
+  const handleHardDelete = async () => {
+    if (!selectedAccount) return
+
+    try {
+      const response = await fetch(`/api/accounts/${selectedAccount.id}/hard-delete`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || "Failed to delete account")
+      }
+
+      const data = await response.json()
+      await fetchAccounts()
+      toast.success(data.message || "Account deleted permanently")
+    } catch (error) {
+      console.error("Error deleting account:", error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to delete account"
+      toast.error(errorMessage)
+      throw error
+    }
+  }
+
+  const handleOpenHardDelete = (accountId: string) => {
+    const account = accounts.find((a) => a.id === accountId)
+    if (account) {
+      setSelectedAccount(account)
+      setHardDeleteDialogOpen(true)
     }
   }
 
@@ -295,6 +352,8 @@ export default function AccountsPage() {
               onTest={handleTestCredentials}
               testing={testingAccount === account.id}
               syncing={syncLoading === account.id}
+              onToggleActive={handleToggleActive}
+              onHardDelete={handleOpenHardDelete}
             />
           ))}
         </div>
@@ -308,12 +367,21 @@ export default function AccountsPage() {
         account={selectedAccount || undefined}
       />
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Confirmation Dialog (Deactivate) */}
       <DeleteConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         onConfirm={handleDeleteAccount}
         accountName={selectedAccount?.account_name}
+      />
+
+      {/* Hard Delete Confirmation Dialog */}
+      <HardDeleteConfirmDialog
+        open={hardDeleteDialogOpen}
+        onOpenChange={setHardDeleteDialogOpen}
+        onConfirm={handleHardDelete}
+        accountName={selectedAccount?.account_name}
+        disputesCount={selectedAccount?.disputes_count}
       />
     </div>
   )

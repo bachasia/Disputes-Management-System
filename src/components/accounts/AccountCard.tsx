@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { formatDistanceToNow } from "date-fns"
-import { Edit, Trash2, RefreshCw, CheckCircle2, ChevronDown, Loader2 } from "lucide-react"
+import { Edit, Trash2, RefreshCw, CheckCircle2, ChevronDown, Loader2, MoreVertical, Power, PowerOff } from "lucide-react"
 import { useSession } from "next-auth/react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -42,6 +42,8 @@ export function AccountCard({
   onTest,
   testing = false,
   syncing = false,
+  onToggleActive,
+  onHardDelete,
 }: AccountCardProps) {
   const { data: session } = useSession()
   const isViewer = session?.user?.role === "viewer"
@@ -99,27 +101,15 @@ export function AccountCard({
               </Button>
             )}
             {canManageAccounts && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => onEdit(account)}
-                >
-                  <Edit className="mr-2 h-4 w-4" />
-                  Edit
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onDelete(account.id)}
-                  className="text-destructive hover:text-destructive"
-                  title="Deactivate account"
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Deactivate
-                </Button>
-              </>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => onEdit(account)}
+              >
+                <Edit className="mr-2 h-4 w-4" />
+                Edit
+              </Button>
             )}
             {!isViewer && (
               <DropdownMenu>
