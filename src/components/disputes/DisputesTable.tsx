@@ -297,7 +297,7 @@ export function DisputesTable({ accountId, filters }: DisputesTableProps) {
                     <ReasonBadge reason={dispute.disputeReason} />
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <StatusBadge status={dispute.disputeStatus} />
                       <OutcomeBadge 
                         outcome={dispute.disputeOutcome} 

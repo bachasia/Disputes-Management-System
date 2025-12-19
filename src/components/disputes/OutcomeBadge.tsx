@@ -17,20 +17,23 @@ function getOutcomeDisplay(outcome: string | null | undefined): {
   type: "won" | "lost" | "cancelled" | null
   label: string
 } {
-  if (!outcome) {
+  if (!outcome || outcome.trim() === "") {
     return { type: null, label: "" }
   }
 
-  const outcomeUpper = outcome.toUpperCase()
+  const outcomeUpper = outcome.toUpperCase().trim()
 
   // Seller won - dispute resolved in seller's favor
   if (
     outcomeUpper.includes("SELLER_FAVOUR") ||
     outcomeUpper.includes("SELLER_FAVOR") ||
+    outcomeUpper.includes("SELLER_FAVOUR") ||
     outcomeUpper.includes("SELLER_WIN") ||
     outcomeUpper.includes("RESOLVED_SELLER") ||
+    outcomeUpper.includes("SELLER") && outcomeUpper.includes("FAVOR") ||
     outcomeUpper === "SELLER_WON" ||
-    outcomeUpper === "WON"
+    outcomeUpper === "WON" ||
+    outcomeUpper === "SELLER"
   ) {
     return { type: "won", label: "Won" }
   }
@@ -41,8 +44,10 @@ function getOutcomeDisplay(outcome: string | null | undefined): {
     outcomeUpper.includes("BUYER_FAVOR") ||
     outcomeUpper.includes("BUYER_WIN") ||
     outcomeUpper.includes("RESOLVED_BUYER") ||
+    outcomeUpper.includes("BUYER") && outcomeUpper.includes("FAVOR") ||
     outcomeUpper === "BUYER_WON" ||
-    outcomeUpper === "LOST"
+    outcomeUpper === "LOST" ||
+    outcomeUpper === "BUYER"
   ) {
     return { type: "lost", label: "Lost" }
   }
@@ -64,15 +69,22 @@ function getOutcomeDisplay(outcome: string | null | undefined): {
 
 export function OutcomeBadge({ outcome, status }: OutcomeBadgeProps) {
   // Only show outcome badge for resolved disputes
-  const statusUpper = status?.toUpperCase() || ""
-  if (statusUpper !== "RESOLVED" && statusUpper !== "CLOSED") {
+  // Check multiple variations of resolved status
+  const statusUpper = (status || "").toUpperCase().trim()
+  const isResolved = 
+    statusUpper === "RESOLVED" || 
+    statusUpper === "CLOSED" ||
+    statusUpper.includes("RESOLVED") ||
+    statusUpper.includes("CLOSED")
+  
+  if (!isResolved) {
     return null
   }
 
   const { type, label } = getOutcomeDisplay(outcome)
 
+  // If no outcome but status is resolved, don't show badge
   if (!type) {
-    // No recognized outcome - don't show badge
     return null
   }
 
