@@ -42,11 +42,11 @@ export function DeleteConfirmDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete PayPal Account</DialogTitle>
+          <DialogTitle>Deactivate PayPal Account</DialogTitle>
           <DialogDescription>
             Are you sure you want to deactivate{" "}
             <span className="font-semibold">{accountName || "this account"}</span>?
-            This will set the account to inactive. You can reactivate it later.
+            This will set the account to inactive. You can reactivate it later by editing the account.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

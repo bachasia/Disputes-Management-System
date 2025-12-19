@@ -121,7 +121,7 @@ export default function AccountsPage() {
     }
   }
 
-  // Handle delete account
+  // Handle delete account (actually deactivates)
   const handleDeleteAccount = async () => {
     if (!selectedAccount) return
 
@@ -131,12 +131,17 @@ export default function AccountsPage() {
       })
 
       if (!response.ok) {
-        throw new Error("Failed to delete account")
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || "Failed to deactivate account")
       }
 
+      const data = await response.json()
       await fetchAccounts()
+      toast.success(data.message || "Account deactivated successfully")
     } catch (error) {
-      console.error("Error deleting account:", error)
+      console.error("Error deactivating account:", error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to deactivate account"
+      toast.error(errorMessage)
       throw error
     }
   }

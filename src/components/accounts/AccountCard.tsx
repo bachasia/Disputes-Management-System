@@ -114,8 +114,10 @@ export function AccountCard({
                   size="sm"
                   onClick={() => onDelete(account.id)}
                   className="text-destructive hover:text-destructive"
+                  title="Deactivate account"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Deactivate
                 </Button>
               </>
             )}
