@@ -51,6 +51,19 @@ export function AccountCard({
   const isViewer = session?.user?.role === "viewer"
   const isAdmin = session?.user?.role === "admin"
   const canManageAccounts = isAdmin // Only admin can manage PayPal accounts
+  
+  // Debug logging
+  React.useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      console.log("[AccountCard] Menu visibility:", {
+        canManageAccounts,
+        isAdmin,
+        hasToggleActive: !!onToggleActive,
+        hasHardDelete: !!onHardDelete,
+      })
+    }
+  }, [canManageAccounts, isAdmin, onToggleActive, onHardDelete])
+  
   return (
     <Card>
       <CardHeader>
@@ -59,6 +72,51 @@ export function AccountCard({
             <CardTitle className="text-lg">{account.account_name}</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">{account.email}</p>
           </div>
+          {canManageAccounts && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {onToggleActive && (
+                  <DropdownMenuItem
+                    onClick={() => onToggleActive(account.id)}
+                    className="cursor-pointer"
+                  >
+                    {account.active ? (
+                      <>
+                        <PowerOff className="mr-2 h-4 w-4" />
+                        Deactivate
+                      </>
+                    ) : (
+                      <>
+                        <Power className="mr-2 h-4 w-4" />
+                        Activate
+                      </>
+                    )}
+                  </DropdownMenuItem>
+                )}
+                {onHardDelete && (
+                  <>
+                    {onToggleActive && <DropdownMenuSeparator />}
+                    <DropdownMenuItem
+                      onClick={() => onHardDelete(account.id)}
+                      className="cursor-pointer text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete Account
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </CardHeader>
       <CardContent>
