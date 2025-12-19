@@ -20,29 +20,31 @@ function isCancelledFromRawData(rawData: any): boolean {
   const raw = rawData as any
 
   // Check status fields for cancelled indicators
-  const status = raw.status || raw.dispute_status || raw.dispute_state || ""
-  const statusUpper = (status || "").toUpperCase().trim()
-
-  if (
-    statusUpper.includes("CANCEL") ||
-    statusUpper.includes("WITHDRAWN") ||
-    statusUpper === "CANCELLED" ||
-    statusUpper === "CANCELED"
-  ) {
-    return true
+  const status = raw.status || raw.dispute_status || raw.dispute_state
+  if (status && typeof status === "string") {
+    const statusUpper = status.toUpperCase().trim()
+    if (
+      statusUpper.includes("CANCEL") ||
+      statusUpper.includes("WITHDRAWN") ||
+      statusUpper === "CANCELLED" ||
+      statusUpper === "CANCELED"
+    ) {
+      return true
+    }
   }
 
   // Check outcome fields for cancelled indicators
-  const outcome = raw.outcome || raw.dispute_outcome || ""
-  const outcomeUpper = (outcome || "").toUpperCase().trim()
-
-  if (
-    outcomeUpper.includes("CANCEL") ||
-    outcomeUpper.includes("WITHDRAWN") ||
-    outcomeUpper === "CANCELLED" ||
-    outcomeUpper === "CANCELED"
-  ) {
-    return true
+  const outcome = raw.outcome || raw.dispute_outcome
+  if (outcome && typeof outcome === "string") {
+    const outcomeUpper = outcome.toUpperCase().trim()
+    if (
+      outcomeUpper.includes("CANCEL") ||
+      outcomeUpper.includes("WITHDRAWN") ||
+      outcomeUpper === "CANCELLED" ||
+      outcomeUpper === "CANCELED"
+    ) {
+      return true
+    }
   }
 
   return false
@@ -55,6 +57,7 @@ function getActualOutcome(outcome: string | null | undefined, rawData: any): str
   // If outcome exists and is not just "RESOLVED" or "CLOSED", use it
   if (
     outcome &&
+    typeof outcome === "string" &&
     outcome.trim() !== "" &&
     outcome.toUpperCase() !== "RESOLVED" &&
     outcome.toUpperCase() !== "CLOSED"
@@ -97,6 +100,7 @@ function getActualOutcome(outcome: string | null | undefined, rawData: any): str
       const lastAdjudication = raw.adjudications[raw.adjudications.length - 1]
       if (
         lastAdjudication.type &&
+        typeof lastAdjudication.type === "string" &&
         lastAdjudication.type.toUpperCase() !== "RESOLVED"
       ) {
         return lastAdjudication.type
@@ -115,7 +119,7 @@ function getOutcomeDisplay(outcome: string | null | undefined): {
   type: "won" | "lost" | "cancelled" | null
   label: string
 } {
-  if (!outcome || outcome.trim() === "") {
+  if (!outcome || typeof outcome !== "string" || outcome.trim() === "") {
     return { type: null, label: "" }
   }
 
