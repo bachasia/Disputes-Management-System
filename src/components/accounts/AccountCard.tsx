@@ -32,6 +32,8 @@ interface AccountCardProps {
   syncing?: boolean
   onTest?: (accountId: string) => void
   testing?: boolean
+  onToggleActive?: (accountId: string) => void
+  onHardDelete?: (accountId: string) => void
 }
 
 export function AccountCard({
