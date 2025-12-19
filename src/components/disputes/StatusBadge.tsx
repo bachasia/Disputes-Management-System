@@ -10,6 +10,45 @@ interface StatusBadgeProps {
 }
 
 /**
+ * Check if dispute is cancelled from rawData (even without explicit outcome)
+ */
+function isCancelledFromRawData(rawData: any): boolean {
+  if (!rawData || typeof rawData !== "object") {
+    return false
+  }
+
+  const raw = rawData as any
+
+  // Check status fields for cancelled indicators
+  const status = raw.status || raw.dispute_status || raw.dispute_state || ""
+  const statusUpper = (status || "").toUpperCase().trim()
+
+  if (
+    statusUpper.includes("CANCEL") ||
+    statusUpper.includes("WITHDRAWN") ||
+    statusUpper === "CANCELLED" ||
+    statusUpper === "CANCELED"
+  ) {
+    return true
+  }
+
+  // Check outcome fields for cancelled indicators
+  const outcome = raw.outcome || raw.dispute_outcome || ""
+  const outcomeUpper = (outcome || "").toUpperCase().trim()
+
+  if (
+    outcomeUpper.includes("CANCEL") ||
+    outcomeUpper.includes("WITHDRAWN") ||
+    outcomeUpper === "CANCELLED" ||
+    outcomeUpper === "CANCELED"
+  ) {
+    return true
+  }
+
+  return false
+}
+
+/**
  * Extract actual outcome from disputeOutcome or rawData
  */
 function getActualOutcome(outcome: string | null | undefined, rawData: any): string | null {
@@ -192,6 +231,16 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
   
   // For RESOLVED or CLOSED status, show Won/Lost/Cancelled if outcome is available
   if (statusUpper === "RESOLVED" || statusUpper === "CLOSED") {
+    // First check if rawData indicates cancelled (even without explicit outcome)
+    if (isCancelledFromRawData(rawData)) {
+      return (
+        <Badge className="bg-gray-500 hover:bg-gray-600 text-white gap-1">
+          <Ban className="h-3 w-3" />
+          Cancelled
+        </Badge>
+      )
+    }
+
     // Extract actual outcome from disputeOutcome or rawData
     const actualOutcome = getActualOutcome(outcome, rawData)
     const { type, label } = getOutcomeDisplay(actualOutcome)
