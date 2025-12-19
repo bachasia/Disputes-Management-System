@@ -159,27 +159,72 @@ export async function GET(request: NextRequest) {
       return null
     }
 
-    // Calculate won disputes - only count resolved disputes with seller-favorable outcome
+    // Calculate won disputes - count resolved disputes with:
+    // 1. Status or outcome indicating "Won"
+    // 2. Status or outcome indicating "Cancelled" (cancelled cases are considered wins)
     const won = resolved.filter((d) => {
+      const status = d.disputeStatus?.toUpperCase().trim() || ""
+      
       // Get actual outcome (from disputeOutcome or rawData)
       const actualOutcome = getActualOutcome(d)
+      const outcome = actualOutcome ? actualOutcome.toUpperCase().trim() : ""
       
-      if (!actualOutcome || actualOutcome.trim() === "") {
-        console.log(
-          `[Analytics] Dispute with status "${d.disputeStatus}" has no valid outcome (stored: "${d.disputeOutcome || 'null'}"). Cannot determine win/loss.`
-        )
-        return false
+      // Check for Cancelled status/outcome first (cancelled = win)
+      const isCancelled = (
+        status.includes("CANCEL") ||
+        status === "CANCELLED" ||
+        status === "CANCELED" ||
+        status.includes("WITHDRAWN") ||
+        outcome.includes("CANCEL") ||
+        outcome === "CANCELLED" ||
+        outcome === "CANCELED" ||
+        outcome.includes("WITHDRAWN")
+      )
+      
+      if (isCancelled) {
+        console.log(`[Analytics] ✓ Dispute with status "${d.disputeStatus}" and outcome "${actualOutcome || 'null'}" is CANCELLED (counted as WIN)`)
+        return true
       }
       
-      const outcome = actualOutcome.toUpperCase().trim()
+      // Check for Won status/outcome
+      const isWonStatus = (
+        status === "WON" ||
+        status.includes("WON")
+      )
       
-      // Check for buyer win indicators first (if buyer won, seller lost)
+      const isWonOutcome = (
+        outcome === "WON" ||
+        outcome.includes("SELLER") ||
+        outcome === "RESOLVED_SELLER_FAVOR" ||
+        outcome === "RESOLVED_SELLER_FAVOUR" ||
+        outcome === "SELLER_WIN" ||
+        outcome === "RESOLVED_IN_SELLER_FAVOR" ||
+        outcome.includes("SELLER_FAVOR") ||
+        outcome.includes("SELLER_FAVOUR") ||
+        outcome.includes("FAVOR_SELLER") ||
+        outcome === "SELLER_FAVORABLE" ||
+        outcome === "FAVORABLE_TO_SELLER" ||
+        // Check for negative buyer indicators (if buyer lost, seller won)
+        (outcome.includes("BUYER") && 
+         (outcome.includes("LOST") || 
+          outcome.includes("DENIED") || 
+          outcome.includes("REJECTED")))
+      )
+      
+      if (isWonStatus || isWonOutcome) {
+        console.log(`[Analytics] ✓ Dispute with status "${d.disputeStatus}" and outcome "${actualOutcome || 'null'}" is WON (counted as WIN)`)
+        return true
+      }
+      
+      // Check for buyer win indicators (if buyer won, seller lost) - exclude from wins
       const isBuyerWin = (
         outcome.includes("PAYOUT_TO_BUYER") ||
         outcome.includes("BUYER_WIN") ||
         outcome.includes("RESOLVED_BUYER_FAVOR") ||
+        outcome.includes("RESOLVED_BUYER_FAVOUR") ||
         outcome.includes("RESOLVED_IN_BUYER_FAVOR") ||
         outcome.includes("BUYER_FAVOR") ||
+        outcome.includes("BUYER_FAVOUR") ||
         outcome.includes("FAVOR_BUYER") ||
         outcome === "REFUNDED" ||
         outcome === "REFUND" ||
@@ -194,34 +239,16 @@ export async function GET(request: NextRequest) {
         return false
       }
       
-      // Check for seller win indicators - expanded list
-      const isWon = (
-        outcome.includes("SELLER") ||
-        outcome === "WON" ||
-        outcome === "RESOLVED_SELLER_FAVOR" ||
-        outcome === "SELLER_WIN" ||
-        outcome === "RESOLVED_IN_SELLER_FAVOR" ||
-        outcome.includes("SELLER_FAVOR") ||
-        outcome.includes("FAVOR_SELLER") ||
-        outcome === "SELLER_FAVORABLE" ||
-        outcome === "FAVORABLE_TO_SELLER" ||
-        outcome === "SELLER_FAVOUR" ||
-        outcome.includes("SELLER_FAVOUR") ||
-        outcome === "RESOLVED_SELLER_FAVOUR" ||
-        // Check for negative buyer indicators (if buyer lost, seller won)
-        (outcome.includes("BUYER") && 
-         (outcome.includes("LOST") || 
-          outcome.includes("DENIED") || 
-          outcome.includes("REJECTED")))
-      )
-      
-      if (isWon) {
-        console.log(`[Analytics] ✓ Dispute with outcome "${actualOutcome}" (from ${d.disputeOutcome ? 'stored' : 'rawData'}) is counted as WON`)
-      } else {
-        console.log(`[Analytics] ✗ Dispute with outcome "${actualOutcome}" (from ${d.disputeOutcome ? 'stored' : 'rawData'}) is NOT counted as WON (may be buyer win or unknown)`)
+      // If no clear outcome, don't count as win
+      if (!actualOutcome || actualOutcome.trim() === "") {
+        console.log(
+          `[Analytics] ✗ Dispute with status "${d.disputeStatus}" has no valid outcome (stored: "${d.disputeOutcome || 'null'}"). Cannot determine win/loss.`
+        )
+        return false
       }
       
-      return isWon
+      console.log(`[Analytics] ✗ Dispute with outcome "${actualOutcome}" is NOT counted as WON (may be buyer win or unknown)`)
+      return false
     }).length
 
     console.log(
