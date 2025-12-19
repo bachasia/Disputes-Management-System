@@ -150,6 +150,7 @@ function isRefunded(outcome: string | null | undefined, rawData: any): boolean {
   if (rawData && typeof rawData === "object") {
     const raw = rawData as any
     const rawOutcome = raw.outcome || raw.dispute_outcome
+    const isResolved = raw.status === "RESOLVED" || raw.dispute_state === "RESOLVED"
     
     // Check outcome field
     if (rawOutcome) {
@@ -167,15 +168,18 @@ function isRefunded(outcome: string | null | undefined, rawData: any): boolean {
     }
 
     // Check adjudications array for refund indicators
-    if (raw.adjudications && Array.isArray(raw.adjudications)) {
+    // Only check if dispute is resolved to avoid false positives
+    if (isResolved && raw.adjudications && Array.isArray(raw.adjudications)) {
       for (const adj of raw.adjudications) {
         if (adj.type) {
           const adjType = safeToUpper(adj.type)
+          // Be more specific - only exact matches or clear refund indicators
           if (
-            adjType.includes("REFUND") ||
             adjType === "FULL_REFUND" ||
             adjType === "PARTIAL_REFUND" ||
-            adjType === "REFUNDED"
+            adjType === "REFUNDED" ||
+            adjType === "REFUND" ||
+            (adjType.includes("REFUND") && !adjType.includes("NOT") && !adjType.includes("NO"))
           ) {
             return true
           }
@@ -183,10 +187,11 @@ function isRefunded(outcome: string | null | undefined, rawData: any): boolean {
         if (adj.adjudication_type) {
           const adjType = safeToUpper(adj.adjudication_type)
           if (
-            adjType.includes("REFUND") ||
             adjType === "FULL_REFUND" ||
             adjType === "PARTIAL_REFUND" ||
-            adjType === "REFUNDED"
+            adjType === "REFUNDED" ||
+            adjType === "REFUND" ||
+            (adjType.includes("REFUND") && !adjType.includes("NOT") && !adjType.includes("NO"))
           ) {
             return true
           }
@@ -194,37 +199,50 @@ function isRefunded(outcome: string | null | undefined, rawData: any): boolean {
       }
     }
 
-    // Check refund_details object
-    if (raw.refund_details) {
-      const refundDetails = raw.refund_details
-      // If refund_details exists and has any meaningful data, it's likely a refund
-      if (
-        refundDetails.allowed_refund_amount ||
-        refundDetails.refund_amount ||
-        refundDetails.refund_id ||
-        refundDetails.refund_status
-      ) {
-        return true
-      }
-    }
-
     // Check if dispute was resolved by accepting claim (full refund)
     // This is indicated by status being RESOLVED and no specific outcome
     // but we can check history or other indicators
-    const isResolved = raw.status === "RESOLVED" || raw.dispute_state === "RESOLVED"
-    if (isResolved) {
-      // If there's no explicit outcome but status is RESOLVED,
-      // and we have refund_details, it might be a refund
-      if (!rawOutcome && raw.refund_details) {
-        // Check if there's an allowed refund amount
-        if (raw.refund_details.allowed_refund_amount) {
-          return true
+    
+    // Only check refund_details if dispute is resolved AND has no explicit outcome
+    // This prevents false positives for open disputes
+    if (isResolved && !rawOutcome) {
+      // Check refund_details object - only if it has actual refund amount/value
+      if (raw.refund_details) {
+        const refundDetails = raw.refund_details
+        // Only consider it refunded if there's an actual refund amount with value
+        if (refundDetails.allowed_refund_amount) {
+          const amount = refundDetails.allowed_refund_amount
+          // Check if it's an object with value property, or a string/number
+          if (
+            (typeof amount === "object" && amount.value && parseFloat(amount.value) > 0) ||
+            (typeof amount === "string" && parseFloat(amount) > 0) ||
+            (typeof amount === "number" && amount > 0)
+          ) {
+            return true
+          }
         }
-      }
-      
-      // Check if there's a refund_id or refund-related fields
-      if (raw.refund_id || raw.refund_amount) {
-        return true
+        // Check refund_amount similarly
+        if (refundDetails.refund_amount) {
+          const amount = refundDetails.refund_amount
+          if (
+            (typeof amount === "object" && amount.value && parseFloat(amount.value) > 0) ||
+            (typeof amount === "string" && parseFloat(amount) > 0) ||
+            (typeof amount === "number" && amount > 0)
+          ) {
+            return true
+          }
+        }
+        // Check refund_status - only if it explicitly indicates refunded
+        if (refundDetails.refund_status) {
+          const status = safeToUpper(refundDetails.refund_status)
+          if (
+            status === "REFUNDED" ||
+            status === "COMPLETED" ||
+            status.includes("REFUND")
+          ) {
+            return true
+          }
+        }
       }
     }
   }
