@@ -322,7 +322,7 @@ export default function DisputesPage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-sm font-bold whitespace-nowrap">
+            <div className="text-sm font-bold flex flex-wrap gap-x-1">
               {Object.keys(stats.totalAmountByCurrency).length > 0 ? (
                 Object.entries(stats.totalAmountByCurrency).map(([currency, amount], index, array) => {
                   const formattedAmount = new Intl.NumberFormat("en-US", {
@@ -330,7 +330,7 @@ export default function DisputesPage() {
                     maximumFractionDigits: 2,
                   }).format(amount)
                   return (
-                    <span key={currency}>
+                    <span key={currency} className="whitespace-nowrap">
                       {formattedAmount} {currency}
                       {index < array.length - 1 && <span className="mx-1">•</span>}
                     </span>
