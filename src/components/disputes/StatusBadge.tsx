@@ -175,6 +175,21 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
     )
   }
   
+  // Check for cancelled/withdrawn status first (these are cancelled disputes)
+  if (
+    statusUpper.includes("CANCEL") ||
+    statusUpper.includes("WITHDRAWN") ||
+    statusUpper === "CANCELLED" ||
+    statusUpper === "CANCELED"
+  ) {
+    return (
+      <Badge className="bg-gray-500 hover:bg-gray-600 text-white gap-1">
+        <Ban className="h-3 w-3" />
+        Cancelled
+      </Badge>
+    )
+  }
+  
   // For RESOLVED or CLOSED status, show Won/Lost/Cancelled if outcome is available
   if (statusUpper === "RESOLVED" || statusUpper === "CLOSED") {
     // Extract actual outcome from disputeOutcome or rawData

@@ -97,10 +97,17 @@ export async function GET(request: NextRequest) {
 
     // Consider disputes resolved if:
     // 1. Status is RESOLVED or CLOSED, OR
-    // 2. resolvedAt field is set (even if status is not explicitly RESOLVED)
+    // 2. Status is CANCELLED or WITHDRAWN (these are also considered resolved), OR
+    // 3. resolvedAt field is set (even if status is not explicitly RESOLVED)
     const resolved = disputes.filter((d) => {
       const status = d.disputeStatus?.toUpperCase() || ""
-      const isStatusResolved = status === "RESOLVED" || status === "CLOSED"
+      const isStatusResolved = 
+        status === "RESOLVED" || 
+        status === "CLOSED" ||
+        status.includes("CANCEL") ||
+        status.includes("WITHDRAWN") ||
+        status === "CANCELLED" ||
+        status === "CANCELED"
       const hasResolvedAt = !!d.resolvedAt
       return isStatusResolved || hasResolvedAt
     })
@@ -247,6 +254,21 @@ export async function GET(request: NextRequest) {
     let cancelled = 0
 
     resolved.forEach((d) => {
+      const status = d.disputeStatus?.toUpperCase() || ""
+      
+      // Check if status itself indicates cancelled (CANCELLED, WITHDRAWN, etc.)
+      const isStatusCancelled =
+        status.includes("CANCEL") ||
+        status.includes("WITHDRAWN") ||
+        status === "CANCELLED" ||
+        status === "CANCELED"
+      
+      if (isStatusCancelled) {
+        cancelled++
+        return
+      }
+      
+      // Otherwise, check outcome
       const actualOutcome = getActualOutcome(d)
       const outcomeType = getOutcomeType(actualOutcome)
 
