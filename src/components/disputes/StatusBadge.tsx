@@ -128,6 +128,7 @@ function getActualOutcome(outcome: string | null | undefined, rawData: any): str
  * - Explicit outcome: REFUNDED, REFUND, FULL_REFUND
  * - Accept claim action (seller accepted = full refund)
  * - Refund details in rawData
+ * - Adjudications indicating refund
  */
 function isRefunded(outcome: string | null | undefined, rawData: any): boolean {
   // Check explicit outcome first
@@ -149,6 +150,8 @@ function isRefunded(outcome: string | null | undefined, rawData: any): boolean {
   if (rawData && typeof rawData === "object") {
     const raw = rawData as any
     const rawOutcome = raw.outcome || raw.dispute_outcome
+    
+    // Check outcome field
     if (rawOutcome) {
       const outcomeUpper = safeToUpper(rawOutcome)
       if (
@@ -163,18 +166,65 @@ function isRefunded(outcome: string | null | undefined, rawData: any): boolean {
       }
     }
 
+    // Check adjudications array for refund indicators
+    if (raw.adjudications && Array.isArray(raw.adjudications)) {
+      for (const adj of raw.adjudications) {
+        if (adj.type) {
+          const adjType = safeToUpper(adj.type)
+          if (
+            adjType.includes("REFUND") ||
+            adjType === "FULL_REFUND" ||
+            adjType === "PARTIAL_REFUND" ||
+            adjType === "REFUNDED"
+          ) {
+            return true
+          }
+        }
+        if (adj.adjudication_type) {
+          const adjType = safeToUpper(adj.adjudication_type)
+          if (
+            adjType.includes("REFUND") ||
+            adjType === "FULL_REFUND" ||
+            adjType === "PARTIAL_REFUND" ||
+            adjType === "REFUNDED"
+          ) {
+            return true
+          }
+        }
+      }
+    }
+
+    // Check refund_details object
+    if (raw.refund_details) {
+      const refundDetails = raw.refund_details
+      // If refund_details exists and has any meaningful data, it's likely a refund
+      if (
+        refundDetails.allowed_refund_amount ||
+        refundDetails.refund_amount ||
+        refundDetails.refund_id ||
+        refundDetails.refund_status
+      ) {
+        return true
+      }
+    }
+
     // Check if dispute was resolved by accepting claim (full refund)
     // This is indicated by status being RESOLVED and no specific outcome
     // but we can check history or other indicators
-    if (raw.status === "RESOLVED" || raw.dispute_state === "RESOLVED") {
+    const isResolved = raw.status === "RESOLVED" || raw.dispute_state === "RESOLVED"
+    if (isResolved) {
       // If there's no explicit outcome but status is RESOLVED,
       // and we have refund_details, it might be a refund
-      // But we should be careful - only if outcome is missing
       if (!rawOutcome && raw.refund_details) {
         // Check if there's an allowed refund amount
         if (raw.refund_details.allowed_refund_amount) {
           return true
         }
+      }
+      
+      // Check if there's a refund_id or refund-related fields
+      if (raw.refund_id || raw.refund_amount) {
+        return true
       }
     }
   }
@@ -188,6 +238,7 @@ function isRefunded(outcome: string | null | undefined, rawData: any): boolean {
  * - Explicit outcome: OFFER_ACCEPTED, ACCEPTED_OFFER
  * - Offer object in rawData with accepted status
  * - Seller offered amount exists and dispute is resolved
+ * - Adjudications indicating offer accepted
  */
 function isOfferAccepted(outcome: string | null | undefined, rawData: any): boolean {
   if (outcome) {
@@ -207,6 +258,8 @@ function isOfferAccepted(outcome: string | null | undefined, rawData: any): bool
   if (rawData && typeof rawData === "object") {
     const raw = rawData as any
     const rawOutcome = raw.outcome || raw.dispute_outcome
+    
+    // Check outcome field
     if (rawOutcome) {
       const outcomeUpper = safeToUpper(rawOutcome)
       if (
@@ -221,6 +274,32 @@ function isOfferAccepted(outcome: string | null | undefined, rawData: any): bool
       }
     }
     
+    // Check adjudications array for offer accepted indicators
+    if (raw.adjudications && Array.isArray(raw.adjudications)) {
+      for (const adj of raw.adjudications) {
+        if (adj.type) {
+          const adjType = safeToUpper(adj.type)
+          if (
+            adjType.includes("OFFER_ACCEPTED") ||
+            adjType.includes("ACCEPTED_OFFER") ||
+            (adjType.includes("OFFER") && adjType.includes("ACCEPTED"))
+          ) {
+            return true
+          }
+        }
+        if (adj.adjudication_type) {
+          const adjType = safeToUpper(adj.adjudication_type)
+          if (
+            adjType.includes("OFFER_ACCEPTED") ||
+            adjType.includes("ACCEPTED_OFFER") ||
+            (adjType.includes("OFFER") && adjType.includes("ACCEPTED"))
+          ) {
+            return true
+          }
+        }
+      }
+    }
+    
     // Check if offer exists and has accepted status or seller offered amount
     if (raw.offer) {
       const offer = raw.offer
@@ -231,16 +310,37 @@ function isOfferAccepted(outcome: string | null | undefined, rawData: any): bool
         if (
           offerStatus === "ACCEPTED" || 
           offerStatus.includes("ACCEPTED") ||
-          offerStatus === "ACCEPTED_BY_BUYER"
+          offerStatus === "ACCEPTED_BY_BUYER" ||
+          offerStatus === "ACCEPTED_BY_SELLER"
         ) {
+          return true
+        }
+      }
+      
+      // Check offer state
+      if (offer.state) {
+        const offerState = safeToUpper(offer.state)
+        if (
+          offerState === "ACCEPTED" ||
+          offerState.includes("ACCEPTED")
+        ) {
+          return true
+        }
+      }
+      
+      // Check if buyer_offered_amount exists (buyer accepted seller's offer)
+      if (offer.buyer_offered_amount && offer.buyer_offered_amount.value) {
+        const isResolved = raw.status === "RESOLVED" || raw.dispute_state === "RESOLVED"
+        if (isResolved) {
           return true
         }
       }
       
       // Check if seller_offered_amount exists and dispute is resolved
       // This indicates an offer was made and likely accepted if resolved
+      const isResolved = raw.status === "RESOLVED" || raw.dispute_state === "RESOLVED"
       if (
-        (raw.status === "RESOLVED" || raw.dispute_state === "RESOLVED") &&
+        isResolved &&
         offer.seller_offered_amount &&
         offer.seller_offered_amount.value
       ) {
@@ -251,8 +351,8 @@ function isOfferAccepted(outcome: string | null | undefined, rawData: any): bool
           (safeToUpper(rawOutcome).includes("REFUND") ||
            safeToUpper(rawOutcome).includes("WON") ||
            safeToUpper(rawOutcome).includes("LOST") ||
-           safeToUpper(rawOutcome).includes("SELLER") ||
-           safeToUpper(rawOutcome).includes("BUYER"))
+           safeToUpper(rawOutcome).includes("SELLER_FAVOR") ||
+           safeToUpper(rawOutcome).includes("BUYER_FAVOR"))
         
         if (!hasOtherOutcome) {
           return true
@@ -419,6 +519,17 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
     // Extract actual outcome from disputeOutcome or rawData FIRST
     const actualOutcome = getActualOutcome(outcome, rawData)
     
+    // Debug logging (remove in production if needed)
+    if (process.env.NODE_ENV === "development") {
+      console.log("[StatusBadge] Checking resolved dispute:", {
+        status,
+        outcome,
+        actualOutcome,
+        hasRawData: !!rawData,
+        rawDataKeys: rawData ? Object.keys(rawData) : [],
+      })
+    }
+    
     // First check if rawData indicates cancelled (even without explicit outcome)
     if (isCancelledFromRawData(rawData)) {
       return (
@@ -431,7 +542,11 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
 
     // Check for refunded (from outcome or rawData) - check BEFORE won/lost
     // Use both outcome and actualOutcome for better detection
-    if (isRefunded(outcome, rawData) || isRefunded(actualOutcome, rawData)) {
+    const isRefundedCheck = isRefunded(outcome, rawData) || isRefunded(actualOutcome, rawData)
+    if (process.env.NODE_ENV === "development" && isRefundedCheck) {
+      console.log("[StatusBadge] Detected REFUNDED:", { outcome, actualOutcome, rawData })
+    }
+    if (isRefundedCheck) {
       return (
         <Badge className="bg-purple-500 hover:bg-purple-600 text-white gap-1">
           <DollarSign className="h-3 w-3" />
@@ -442,7 +557,11 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
 
     // Check for offer accepted (from outcome or rawData) - check BEFORE won/lost
     // Use both outcome and actualOutcome for better detection
-    if (isOfferAccepted(outcome, rawData) || isOfferAccepted(actualOutcome, rawData)) {
+    const isOfferAcceptedCheck = isOfferAccepted(outcome, rawData) || isOfferAccepted(actualOutcome, rawData)
+    if (process.env.NODE_ENV === "development" && isOfferAcceptedCheck) {
+      console.log("[StatusBadge] Detected OFFER ACCEPTED:", { outcome, actualOutcome, rawData })
+    }
+    if (isOfferAcceptedCheck) {
       return (
         <Badge className="bg-blue-500 hover:bg-blue-600 text-white gap-1">
           <CheckCircle2 className="h-3 w-3" />
