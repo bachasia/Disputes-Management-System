@@ -355,27 +355,12 @@ function isOfferAccepted(outcome: string | null | undefined, rawData: any): bool
       }
       
       // Check if seller_offered_amount exists and dispute is resolved
-      // This indicates an offer was made and likely accepted if resolved
-      const isResolved = raw.status === "RESOLVED" || raw.dispute_state === "RESOLVED"
-      if (
-        isResolved &&
-        offer.seller_offered_amount &&
-        offer.seller_offered_amount.value
-      ) {
-        // If there's a seller offered amount and dispute is resolved,
-        // and no explicit outcome indicating refund or win/loss,
-        // it's likely the offer was accepted
-        const hasOtherOutcome = rawOutcome && 
-          (safeToUpper(rawOutcome).includes("REFUND") ||
-           safeToUpper(rawOutcome).includes("WON") ||
-           safeToUpper(rawOutcome).includes("LOST") ||
-           safeToUpper(rawOutcome).includes("SELLER_FAVOR") ||
-           safeToUpper(rawOutcome).includes("BUYER_FAVOR"))
-        
-        if (!hasOtherOutcome) {
-          return true
-        }
-      }
+      // ONLY consider it offer accepted if:
+      // 1. Status is explicitly ACCEPTED (already checked above)
+      // 2. OR there's buyer_offered_amount (buyer accepted seller's offer)
+      // 3. OR there's explicit outcome indicating offer accepted
+      // DO NOT assume offer accepted just because seller_offered_amount exists and dispute is resolved
+      // This could be Won/Lost instead
     }
   }
 
@@ -589,7 +574,26 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
     }
 
     // Now check for Won/Lost/Cancelled using outcome display
-    const { type, label } = getOutcomeDisplay(actualOutcome)
+    // Try actualOutcome first, then fallback to outcome, then rawData
+    let outcomeToCheck = actualOutcome || outcome
+    if (!outcomeToCheck && rawData && typeof rawData === "object") {
+      const raw = rawData as any
+      outcomeToCheck = raw.outcome || raw.dispute_outcome || null
+    }
+    
+    const { type, label } = getOutcomeDisplay(outcomeToCheck)
+    
+    // Debug logging for outcome display
+    if (process.env.NODE_ENV === "development") {
+      console.log("[StatusBadge] getOutcomeDisplay result:", {
+        actualOutcome,
+        outcome,
+        outcomeToCheck,
+        type,
+        label,
+        rawDataOutcome: rawData && typeof rawData === "object" ? (rawData as any).outcome : null,
+      })
+    }
     
     // If we have a valid outcome, show Won/Lost/Cancelled/Refunded/Offer Accepted badge
     if (type === "won") {
