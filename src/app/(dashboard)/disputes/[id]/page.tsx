@@ -212,6 +212,7 @@ export default function DisputeDetailPage() {
                 <StatusBadge 
                   status={dispute.disputeStatus} 
                   outcome={dispute.disputeOutcome}
+                  rawData={dispute.rawData}
                 />
                 <ReasonBadge reason={dispute.disputeReason} />
               </div>

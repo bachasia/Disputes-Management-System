@@ -36,6 +36,7 @@ interface Dispute {
   disputeUpdateTime: Date | null
   responseDueDate: Date | null
   description: string | null
+  rawData: any
   paypalAccount: {
     id: string
     accountName: string
@@ -300,6 +301,7 @@ export function DisputesTable({ accountId, filters }: DisputesTableProps) {
                       <StatusBadge 
                         status={dispute.disputeStatus} 
                         outcome={dispute.disputeOutcome}
+                        rawData={dispute.rawData}
                       />
                     </div>
                   </TableCell>
