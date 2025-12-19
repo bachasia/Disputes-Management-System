@@ -1,7 +1,7 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
-import { Trophy, XCircle, Ban, CheckCircle2, DollarSign } from "lucide-react"
+import { Trophy, XCircle, Ban, CheckCircle2, DollarSign, Eye } from "lucide-react"
 
 interface StatusBadgeProps {
   status: string | null
@@ -578,7 +578,8 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
   }
   if (statusUpper.includes("REVIEW")) {
     return (
-      <Badge className="bg-blue-500 hover:bg-blue-600 text-white">
+      <Badge className="bg-blue-500 hover:bg-blue-600 text-white gap-1 whitespace-nowrap">
+        <Eye className="h-3 w-3" />
         Under Review
       </Badge>
     )
