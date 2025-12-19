@@ -530,70 +530,72 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
       </Badge>
     )
   }
-  if (statusUpper.includes("WAITING")) {
-    // Debug logging to see actual status values
+  
+  // Check for waiting/required action statuses (check BEFORE generic WAITING check)
+  // PayPal API uses: REQUIRED_ACTION, REQUIRED_OTHER_PARTY_ACTION, WAITING_FOR_SELLER_RESPONSE, etc.
+  
+  // WAITING_FOR_SELLER_RESPONSE or REQUIRED_ACTION - seller needs to respond
+  if (
+    statusUpper === "WAITING_FOR_SELLER_RESPONSE" ||
+    statusUpper === "REQUIRED_ACTION" ||
+    (statusUpper.includes("WAITING_FOR_SELLER") && statusUpper.includes("RESPONSE")) ||
+    (statusUpper.includes("REQUIRED") && statusUpper.includes("ACTION") && !statusUpper.includes("OTHER"))
+  ) {
+    // Debug logging
     if (process.env.NODE_ENV === "development") {
-      console.log("[StatusBadge] WAITING status detected:", {
+      console.log("[StatusBadge] SELLER RESPONSE status:", {
         status,
         statusUpper,
+        actualStatus,
         rawDataStatus: rawData && typeof rawData === "object" ? (rawData as any).status : null,
         rawDataDisputeState: rawData && typeof rawData === "object" ? (rawData as any).dispute_state : null,
       })
     }
-    
-    // Check for specific waiting statuses and show appropriate labels
-    // PayPal API uses: REQUIRED_ACTION, REQUIRED_OTHER_PARTY_ACTION, WAITING_FOR_SELLER_RESPONSE, etc.
-    
-    // WAITING_FOR_SELLER_RESPONSE - specific badge
-    if (statusUpper === "WAITING_FOR_SELLER_RESPONSE") {
-      return (
-        <Badge className="bg-orange-500 hover:bg-orange-600 text-white gap-1 whitespace-nowrap">
-          <Clock className="h-3 w-3" />
-          Awaiting your response
-        </Badge>
-      )
+    return (
+      <Badge className="bg-orange-500 hover:bg-orange-600 text-white gap-1 whitespace-nowrap">
+        <Clock className="h-3 w-3" />
+        Awaiting your response
+      </Badge>
+    )
+  }
+  
+  // WAITING_FOR_BUYER_RESPONSE or REQUIRED_OTHER_PARTY_ACTION - waiting for buyer
+  if (
+    statusUpper === "WAITING_FOR_BUYER_RESPONSE" ||
+    statusUpper === "REQUIRED_OTHER_PARTY_ACTION" ||
+    (statusUpper.includes("WAITING_FOR_BUYER") && statusUpper.includes("RESPONSE")) ||
+    (statusUpper.includes("REQUIRED") && statusUpper.includes("OTHER"))
+  ) {
+    // Debug logging
+    if (process.env.NODE_ENV === "development") {
+      console.log("[StatusBadge] BUYER RESPONSE status:", {
+        status,
+        statusUpper,
+        actualStatus,
+        rawDataStatus: rawData && typeof rawData === "object" ? (rawData as any).status : null,
+        rawDataDisputeState: rawData && typeof rawData === "object" ? (rawData as any).dispute_state : null,
+      })
     }
-    
-    // WAITING_FOR_BUYER_RESPONSE - specific badge
-    if (statusUpper === "WAITING_FOR_BUYER_RESPONSE") {
-      return (
-        <Badge className="bg-amber-500 hover:bg-amber-600 text-white gap-1 whitespace-nowrap">
-          <Clock className="h-3 w-3" />
-          Waiting for buyer
-        </Badge>
-      )
+    return (
+      <Badge className="bg-amber-500 hover:bg-amber-600 text-white gap-1 whitespace-nowrap">
+        <Clock className="h-3 w-3" />
+        Waiting for buyer
+      </Badge>
+    )
+  }
+  
+  // Generic WAITING status (fallback)
+  if (statusUpper.includes("WAITING")) {
+    // Debug logging to see actual status values
+    if (process.env.NODE_ENV === "development") {
+      console.log("[StatusBadge] Generic WAITING status detected:", {
+        status,
+        statusUpper,
+        actualStatus,
+        rawDataStatus: rawData && typeof rawData === "object" ? (rawData as any).status : null,
+        rawDataDisputeState: rawData && typeof rawData === "object" ? (rawData as any).dispute_state : null,
+      })
     }
-    
-    // Other seller response waiting statuses
-    if (
-      statusUpper.includes("WAITING_FOR_SELLER") ||
-      statusUpper.includes("SELLER_RESPONSE") ||
-      statusUpper === "REQUIRED_ACTION" || // PayPal API: seller needs to respond
-      (statusUpper.includes("REQUIRED") && statusUpper.includes("ACTION") && !statusUpper.includes("OTHER"))
-    ) {
-      return (
-        <Badge className="bg-orange-500 hover:bg-orange-600 text-white gap-1 whitespace-nowrap">
-          <Clock className="h-3 w-3" />
-          Awaiting your response
-        </Badge>
-      )
-    }
-    
-    // Other buyer response waiting statuses
-    if (
-      statusUpper.includes("WAITING_FOR_BUYER") ||
-      statusUpper.includes("BUYER_RESPONSE") ||
-      statusUpper === "REQUIRED_OTHER_PARTY_ACTION" || // PayPal API: waiting for buyer/other party
-      (statusUpper.includes("REQUIRED") && statusUpper.includes("OTHER"))
-    ) {
-      return (
-        <Badge className="bg-amber-500 hover:bg-amber-600 text-white gap-1 whitespace-nowrap">
-          <Clock className="h-3 w-3" />
-          Waiting for buyer
-        </Badge>
-      )
-    }
-    // Generic waiting status
     return (
       <Badge className="bg-orange-500 hover:bg-orange-600 text-white gap-1 whitespace-nowrap">
         <Clock className="h-3 w-3" />
