@@ -72,6 +72,37 @@ export function KPICards({ data, loading }: KPICardsProps) {
       .join(" + ")
   }
 
+  const renderTotalAmountByCurrency = () => {
+    const currencies = Object.keys(data.totalAmountByCurrency)
+    if (currencies.length === 0) {
+      return <div className="text-2xl font-bold">$0.00</div>
+    }
+    if (currencies.length === 1) {
+      const currency = currencies[0]
+      const formatted = new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: currency,
+      }).format(data.totalAmountByCurrency[currency])
+      return <div className="text-2xl font-bold">{formatted}</div>
+    }
+    return (
+      <div className="flex flex-wrap gap-x-1 items-baseline">
+        {currencies.map((currency, index) => {
+          const formatted = new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: currency,
+          }).format(data.totalAmountByCurrency[currency])
+          return (
+            <span key={currency} className="whitespace-nowrap text-sm font-semibold">
+              {formatted}
+              {index < currencies.length - 1 && <span className="mx-1">+</span>}
+            </span>
+          )
+        })}
+      </div>
+    )
+  }
+
   const isPositiveChange = data.monthOverMonthChange >= 0
 
   return (
@@ -123,7 +154,7 @@ export function KPICards({ data, loading }: KPICardsProps) {
           <DollarSign className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{formatTotalAmount()}</div>
+          {renderTotalAmountByCurrency()}
           <p className="text-xs text-muted-foreground">Dispute value</p>
         </CardContent>
       </Card>
