@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
 
     // Build dynamic WHERE clause
     const where: Prisma.DisputeWhereInput = {}
+    const andConditions: Prisma.DisputeWhereInput[] = []
 
     // Filter by account_id
     if (params.account_id) {
@@ -53,7 +54,19 @@ export async function GET(request: NextRequest) {
 
     // Filter by status
     if (params.status) {
-      where.disputeStatus = params.status
+      // Special handling for "OPEN" status - include all open-related statuses
+      if (params.status.toUpperCase() === "OPEN") {
+        andConditions.push({
+          OR: [
+            { disputeStatus: "OPEN" },
+            { disputeStatus: { contains: "WAITING", mode: "insensitive" } },
+            { disputeStatus: { contains: "REVIEW", mode: "insensitive" } },
+          ],
+        })
+      } else {
+        // For other statuses, use exact match
+        where.disputeStatus = params.status
+      }
     }
 
     // Filter by dispute_type
@@ -77,13 +90,20 @@ export async function GET(request: NextRequest) {
 
     // Search filter (search in dispute_id, transaction_id, customer_email, customer_name, invoice_number)
     if (params.search) {
-      where.OR = [
-        { disputeId: { contains: params.search, mode: "insensitive" } },
-        { transactionId: { contains: params.search, mode: "insensitive" } },
-        { customerEmail: { contains: params.search, mode: "insensitive" } },
-        { customerName: { contains: params.search, mode: "insensitive" } },
-        { invoiceNumber: { contains: params.search, mode: "insensitive" } },
-      ]
+      andConditions.push({
+        OR: [
+          { disputeId: { contains: params.search, mode: "insensitive" } },
+          { transactionId: { contains: params.search, mode: "insensitive" } },
+          { customerEmail: { contains: params.search, mode: "insensitive" } },
+          { customerName: { contains: params.search, mode: "insensitive" } },
+          { invoiceNumber: { contains: params.search, mode: "insensitive" } },
+        ],
+      })
+    }
+
+    // Combine all AND conditions if any
+    if (andConditions.length > 0) {
+      where.AND = andConditions
     }
 
     // Pagination

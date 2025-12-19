@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
 
     // Build where clause (same as disputes route)
     const where: any = {}
+    const andConditions: any[] = []
 
     // Filter by account_id
     const accountId = searchParams.get("account_id")
@@ -34,7 +35,19 @@ export async function GET(request: NextRequest) {
     // Filter by status
     const status = searchParams.get("status")
     if (status) {
-      where.disputeStatus = status
+      // Special handling for "OPEN" status - include all open-related statuses
+      if (status.toUpperCase() === "OPEN") {
+        andConditions.push({
+          OR: [
+            { disputeStatus: "OPEN" },
+            { disputeStatus: { contains: "WAITING", mode: "insensitive" } },
+            { disputeStatus: { contains: "REVIEW", mode: "insensitive" } },
+          ],
+        })
+      } else {
+        // For other statuses, use exact match
+        where.disputeStatus = status
+      }
     }
 
     // Filter by dispute_type
@@ -62,13 +75,20 @@ export async function GET(request: NextRequest) {
     // Search filter
     const search = searchParams.get("search")
     if (search) {
-      where.OR = [
-        { disputeId: { contains: search, mode: "insensitive" } },
-        { transactionId: { contains: search, mode: "insensitive" } },
-        { customerEmail: { contains: search, mode: "insensitive" } },
-        { customerName: { contains: search, mode: "insensitive" } },
-        { invoiceNumber: { contains: search, mode: "insensitive" } },
-      ]
+      andConditions.push({
+        OR: [
+          { disputeId: { contains: search, mode: "insensitive" } },
+          { transactionId: { contains: search, mode: "insensitive" } },
+          { customerEmail: { contains: search, mode: "insensitive" } },
+          { customerName: { contains: search, mode: "insensitive" } },
+          { invoiceNumber: { contains: search, mode: "insensitive" } },
+        ],
+      })
+    }
+
+    // Combine all AND conditions if any
+    if (andConditions.length > 0) {
+      where.AND = andConditions
     }
 
     // Get all disputes matching filters (for accurate stats)
