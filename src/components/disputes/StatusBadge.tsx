@@ -10,6 +10,15 @@ interface StatusBadgeProps {
 }
 
 /**
+ * Safely convert value to uppercase string
+ */
+function safeToUpper(value: any): string {
+  if (value == null) return ""
+  if (typeof value === "string") return value.toUpperCase().trim()
+  return String(value).toUpperCase().trim()
+}
+
+/**
  * Check if dispute is cancelled from rawData (even without explicit outcome)
  */
 function isCancelledFromRawData(rawData: any): boolean {
@@ -21,8 +30,8 @@ function isCancelledFromRawData(rawData: any): boolean {
 
   // Check status fields for cancelled indicators
   const status = raw.status || raw.dispute_status || raw.dispute_state
-  if (status && typeof status === "string") {
-    const statusUpper = status.toUpperCase().trim()
+  if (status) {
+    const statusUpper = safeToUpper(status)
     if (
       statusUpper.includes("CANCEL") ||
       statusUpper.includes("WITHDRAWN") ||
@@ -35,8 +44,8 @@ function isCancelledFromRawData(rawData: any): boolean {
 
   // Check outcome fields for cancelled indicators
   const outcome = raw.outcome || raw.dispute_outcome
-  if (outcome && typeof outcome === "string") {
-    const outcomeUpper = outcome.toUpperCase().trim()
+  if (outcome) {
+    const outcomeUpper = safeToUpper(outcome)
     if (
       outcomeUpper.includes("CANCEL") ||
       outcomeUpper.includes("WITHDRAWN") ||
@@ -55,14 +64,15 @@ function isCancelledFromRawData(rawData: any): boolean {
  */
 function getActualOutcome(outcome: string | null | undefined, rawData: any): string | null {
   // If outcome exists and is not just "RESOLVED" or "CLOSED", use it
-  if (
-    outcome &&
-    typeof outcome === "string" &&
-    outcome.trim() !== "" &&
-    outcome.toUpperCase() !== "RESOLVED" &&
-    outcome.toUpperCase() !== "CLOSED"
-  ) {
-    return outcome
+  if (outcome) {
+    const outcomeUpper = safeToUpper(outcome)
+    if (
+      outcomeUpper &&
+      outcomeUpper !== "RESOLVED" &&
+      outcomeUpper !== "CLOSED"
+    ) {
+      return typeof outcome === "string" ? outcome : String(outcome)
+    }
   }
 
   // Try to extract from rawData if available
@@ -70,25 +80,27 @@ function getActualOutcome(outcome: string | null | undefined, rawData: any): str
     const raw = rawData as any
 
     // Check for outcome field in rawData (most common)
-    if (
-      raw.outcome &&
-      typeof raw.outcome === "string" &&
-      raw.outcome.trim() !== "" &&
-      raw.outcome.toUpperCase() !== "RESOLVED" &&
-      raw.outcome.toUpperCase() !== "CLOSED"
-    ) {
-      return raw.outcome
+    if (raw.outcome) {
+      const outcomeUpper = safeToUpper(raw.outcome)
+      if (
+        outcomeUpper &&
+        outcomeUpper !== "RESOLVED" &&
+        outcomeUpper !== "CLOSED"
+      ) {
+        return typeof raw.outcome === "string" ? raw.outcome : String(raw.outcome)
+      }
     }
 
     // Check for dispute_outcome field (alternative format)
-    if (
-      raw.dispute_outcome &&
-      typeof raw.dispute_outcome === "string" &&
-      raw.dispute_outcome.trim() !== "" &&
-      raw.dispute_outcome.toUpperCase() !== "RESOLVED" &&
-      raw.dispute_outcome.toUpperCase() !== "CLOSED"
-    ) {
-      return raw.dispute_outcome
+    if (raw.dispute_outcome) {
+      const outcomeUpper = safeToUpper(raw.dispute_outcome)
+      if (
+        outcomeUpper &&
+        outcomeUpper !== "RESOLVED" &&
+        outcomeUpper !== "CLOSED"
+      ) {
+        return typeof raw.dispute_outcome === "string" ? raw.dispute_outcome : String(raw.dispute_outcome)
+      }
     }
 
     // Check for other possible outcome indicators
@@ -98,12 +110,11 @@ function getActualOutcome(outcome: string | null | undefined, rawData: any): str
       raw.adjudications.length > 0
     ) {
       const lastAdjudication = raw.adjudications[raw.adjudications.length - 1]
-      if (
-        lastAdjudication.type &&
-        typeof lastAdjudication.type === "string" &&
-        lastAdjudication.type.toUpperCase() !== "RESOLVED"
-      ) {
-        return lastAdjudication.type
+      if (lastAdjudication.type) {
+        const typeUpper = safeToUpper(lastAdjudication.type)
+        if (typeUpper && typeUpper !== "RESOLVED") {
+          return typeof lastAdjudication.type === "string" ? lastAdjudication.type : String(lastAdjudication.type)
+        }
       }
     }
   }
@@ -120,8 +131,8 @@ function getActualOutcome(outcome: string | null | undefined, rawData: any): str
  */
 function isRefunded(outcome: string | null | undefined, rawData: any): boolean {
   // Check explicit outcome first
-  if (outcome && typeof outcome === "string") {
-    const outcomeUpper = outcome.toUpperCase().trim()
+  if (outcome) {
+    const outcomeUpper = safeToUpper(outcome)
     if (
       outcomeUpper === "REFUNDED" ||
       outcomeUpper === "REFUND" ||
@@ -138,8 +149,8 @@ function isRefunded(outcome: string | null | undefined, rawData: any): boolean {
   if (rawData && typeof rawData === "object") {
     const raw = rawData as any
     const rawOutcome = raw.outcome || raw.dispute_outcome
-    if (rawOutcome && typeof rawOutcome === "string") {
-      const outcomeUpper = rawOutcome.toUpperCase().trim()
+    if (rawOutcome) {
+      const outcomeUpper = safeToUpper(rawOutcome)
       if (
         outcomeUpper === "REFUNDED" ||
         outcomeUpper === "REFUND" ||
@@ -179,8 +190,8 @@ function isRefunded(outcome: string | null | undefined, rawData: any): boolean {
  * - Seller offered amount exists and dispute is resolved
  */
 function isOfferAccepted(outcome: string | null | undefined, rawData: any): boolean {
-  if (outcome && typeof outcome === "string") {
-    const outcomeUpper = outcome.toUpperCase().trim()
+  if (outcome) {
+    const outcomeUpper = safeToUpper(outcome)
     if (
       outcomeUpper.includes("OFFER_ACCEPTED") ||
       outcomeUpper.includes("ACCEPTED_OFFER") ||
@@ -196,8 +207,8 @@ function isOfferAccepted(outcome: string | null | undefined, rawData: any): bool
   if (rawData && typeof rawData === "object") {
     const raw = rawData as any
     const rawOutcome = raw.outcome || raw.dispute_outcome
-    if (rawOutcome && typeof rawOutcome === "string") {
-      const outcomeUpper = rawOutcome.toUpperCase().trim()
+    if (rawOutcome) {
+      const outcomeUpper = safeToUpper(rawOutcome)
       if (
         outcomeUpper.includes("OFFER_ACCEPTED") ||
         outcomeUpper.includes("ACCEPTED_OFFER") ||
@@ -215,8 +226,8 @@ function isOfferAccepted(outcome: string | null | undefined, rawData: any): bool
       const offer = raw.offer
       
       // Check offer status
-      if (offer.status && typeof offer.status === "string") {
-        const offerStatus = offer.status.toUpperCase().trim()
+      if (offer.status) {
+        const offerStatus = safeToUpper(offer.status)
         if (
           offerStatus === "ACCEPTED" || 
           offerStatus.includes("ACCEPTED") ||
@@ -237,11 +248,11 @@ function isOfferAccepted(outcome: string | null | undefined, rawData: any): bool
         // and no explicit outcome indicating refund or win/loss,
         // it's likely the offer was accepted
         const hasOtherOutcome = rawOutcome && 
-          (rawOutcome.toUpperCase().includes("REFUND") ||
-           rawOutcome.toUpperCase().includes("WON") ||
-           rawOutcome.toUpperCase().includes("LOST") ||
-           rawOutcome.toUpperCase().includes("SELLER") ||
-           rawOutcome.toUpperCase().includes("BUYER"))
+          (safeToUpper(rawOutcome).includes("REFUND") ||
+           safeToUpper(rawOutcome).includes("WON") ||
+           safeToUpper(rawOutcome).includes("LOST") ||
+           safeToUpper(rawOutcome).includes("SELLER") ||
+           safeToUpper(rawOutcome).includes("BUYER"))
         
         if (!hasOtherOutcome) {
           return true
@@ -261,11 +272,14 @@ function getOutcomeDisplay(outcome: string | null | undefined): {
   type: "won" | "lost" | "cancelled" | "refunded" | "offer_accepted" | null
   label: string
 } {
-  if (!outcome || typeof outcome !== "string" || outcome.trim() === "") {
+  if (!outcome) {
     return { type: null, label: "" }
   }
 
-  const outcomeUpper = outcome.toUpperCase().trim()
+  const outcomeUpper = safeToUpper(outcome)
+  if (!outcomeUpper) {
+    return { type: null, label: "" }
+  }
 
   // Check for cancelled/withdrawn first
   if (
@@ -360,7 +374,8 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
     return <Badge variant="outline">Unknown</Badge>
   }
 
-  const statusUpper = status.toUpperCase()
+  // Ensure status is a string before calling toUpperCase
+  const statusUpper = typeof status === "string" ? status.toUpperCase() : String(status || "").toUpperCase()
 
   if (statusUpper === "OPEN") {
     return (
