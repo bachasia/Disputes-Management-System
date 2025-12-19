@@ -523,6 +523,30 @@ export function StatusBadge({ status, outcome, rawData }: StatusBadgeProps) {
     )
   }
   if (statusUpper.includes("WAITING")) {
+    // Check for specific waiting statuses and show appropriate labels
+    if (
+      statusUpper.includes("WAITING_FOR_SELLER") ||
+      statusUpper.includes("SELLER_RESPONSE") ||
+      statusUpper === "WAITING_FOR_SELLER_RESPONSE"
+    ) {
+      return (
+        <Badge className="bg-orange-500 hover:bg-orange-600 text-white">
+          Awaiting your response
+        </Badge>
+      )
+    }
+    if (
+      statusUpper.includes("WAITING_FOR_BUYER") ||
+      statusUpper.includes("BUYER_RESPONSE") ||
+      statusUpper === "WAITING_FOR_BUYER_RESPONSE"
+    ) {
+      return (
+        <Badge className="bg-orange-500 hover:bg-orange-600 text-white">
+          Waiting for buyer
+        </Badge>
+      )
+    }
+    // Generic waiting status
     return (
       <Badge className="bg-orange-500 hover:bg-orange-600 text-white">
         Waiting
