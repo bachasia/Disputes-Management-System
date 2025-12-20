@@ -108,6 +108,47 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // Helper function to check if dispute is cancelled from rawData
+    // This is important because cancelled disputes might have status RESOLVED/CLOSED
+    // but the actual cancelled status is in rawData
+    const isCancelledFromRawData = (rawData: any): boolean => {
+      if (!rawData || typeof rawData !== "object") {
+        return false
+      }
+
+      const raw = rawData as any
+
+      // Check status fields for cancelled indicators
+      const status = raw.status || raw.dispute_status || raw.dispute_state
+      if (status) {
+        const statusUpper = String(status).toUpperCase().trim()
+        if (
+          statusUpper.includes("CANCEL") ||
+          statusUpper.includes("WITHDRAWN") ||
+          statusUpper === "CANCELLED" ||
+          statusUpper === "CANCELED"
+        ) {
+          return true
+        }
+      }
+
+      // Check outcome fields for cancelled indicators
+      const outcome = raw.outcome || raw.dispute_outcome
+      if (outcome) {
+        const outcomeUpper = String(outcome).toUpperCase().trim()
+        if (
+          outcomeUpper.includes("CANCEL") ||
+          outcomeUpper.includes("WITHDRAWN") ||
+          outcomeUpper === "CANCELLED" ||
+          outcomeUpper === "CANCELED"
+        ) {
+          return true
+        }
+      }
+
+      return false
+    }
+
     // Helper function to extract actual outcome from dispute
     const getActualOutcome = (dispute: any): string | null => {
       // If outcome exists and is not just "RESOLVED" or "CLOSED", use it
@@ -169,7 +210,14 @@ export async function GET(request: NextRequest) {
       const actualOutcome = getActualOutcome(d)
       const outcome = actualOutcome ? actualOutcome.toUpperCase().trim() : ""
       
-      // Check for Cancelled status/outcome first (cancelled = win)
+      // IMPORTANT: Check for Cancelled from rawData FIRST
+      // This catches cases where status is RESOLVED/CLOSED but rawData shows cancelled
+      if (isCancelledFromRawData(d.rawData)) {
+        console.log(`[Analytics] ✓ Dispute with status "${d.disputeStatus}" is CANCELLED from rawData (counted as WIN)`)
+        return true
+      }
+      
+      // Check for Cancelled status/outcome (cancelled = win)
       const isCancelled = (
         status.includes("CANCEL") ||
         status === "CANCELLED" ||
