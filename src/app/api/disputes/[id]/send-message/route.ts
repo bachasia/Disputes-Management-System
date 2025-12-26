@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db/prisma"
-import { PayPalClient, PayPalDisputesAPI } from "@/lib/paypal"
+import { PayPalClient, PayPalDisputesAPI, PayPalAPIError } from "@/lib/paypal"
 import { decrypt } from "@/lib/utils/encryption"
 import { checkWritePermission } from "@/lib/auth/role-check"
 
@@ -90,8 +90,39 @@ export async function POST(
     })
 
     return NextResponse.json({ success: true }, { status: 200 })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error sending message:", error)
+    
+    // Handle PayPal API errors with detailed messages
+    if (error.name === "PayPalAPIError" || error.statusCode) {
+      const statusCode = error.statusCode || 500
+      let errorMessage = error.message || "Failed to send message"
+      let userFriendlyMessage = errorMessage
+      
+      // Extract specific error details from PayPal API response
+      if (error.details?.details && Array.isArray(error.details.details)) {
+        const issues = error.details.details.map((d: any) => d.issue).filter(Boolean)
+        
+        // Map PayPal error codes to user-friendly messages
+        if (issues.includes("ACTION_NOT_ALLOWED_IN_CURRENT_DISPUTE_STATE")) {
+          userFriendlyMessage = "Cannot send message: This action is not allowed in the current dispute state. The dispute may be resolved, closed, or in a state that doesn't allow sending messages."
+        } else if (issues.length > 0) {
+          userFriendlyMessage = `PayPal API Error: ${issues.join(", ")}`
+        }
+      }
+      
+      return NextResponse.json(
+        {
+          error: "Failed to send message",
+          message: userFriendlyMessage,
+          paypalError: error.details?.name || error.name,
+          paypalDetails: error.details?.details,
+        },
+        { status: statusCode }
+      )
+    }
+    
+    // Handle other errors
     return NextResponse.json(
       {
         error: "Failed to send message",
