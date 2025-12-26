@@ -8,6 +8,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-disputes_db}
+      # Reduce logging for invalid connection attempts (port scanners, bots)
+      POSTGRES_INITDB_ARGS: "-c log_min_messages=warning"
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -19,6 +21,12 @@ services:
       retries: 5
     networks:
       - dispute-network-dev
+    command: >
+      postgres
+      -c log_min_messages=warning
+      -c log_connections=off
+      -c log_disconnections=off
+      -c log_min_error_statement=error
 
   # Next.js Application (Development)
   app:
