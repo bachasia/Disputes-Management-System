@@ -92,16 +92,29 @@ export async function POST(
     return NextResponse.json({ success: true }, { status: 200 })
   } catch (error: any) {
     console.error("Error sending message:", error)
+    console.error("Error type:", error?.constructor?.name)
+    console.error("Error name:", error?.name)
+    console.error("Error statusCode:", error?.statusCode)
+    console.error("Error details:", JSON.stringify(error?.details, null, 2))
     
     // Handle PayPal API errors with detailed messages
-    if (error.name === "PayPalAPIError" || error.statusCode) {
-      const statusCode = error.statusCode || 500
+    // Check for PayPalAPIError by name, statusCode, or details structure
+    const isPayPalError = 
+      error?.name === "PayPalAPIError" || 
+      error?.constructor?.name === "PayPalAPIError" ||
+      (error?.statusCode && error?.statusCode >= 400 && error?.statusCode < 500) ||
+      (error?.details && typeof error.details === "object" && error.details.details)
+    
+    if (isPayPalError) {
+      const statusCode = error.statusCode || 422
       let errorMessage = error.message || "Failed to send message"
       let userFriendlyMessage = errorMessage
       
       // Extract specific error details from PayPal API response
-      if (error.details?.details && Array.isArray(error.details.details)) {
-        const issues = error.details.details.map((d: any) => d.issue).filter(Boolean)
+      const errorDetails = error.details || {}
+      if (errorDetails.details && Array.isArray(errorDetails.details)) {
+        const issues = errorDetails.details.map((d: any) => d.issue).filter(Boolean)
+        console.log("PayPal error issues:", issues)
         
         // Map PayPal error codes to user-friendly messages
         if (issues.includes("ACTION_NOT_ALLOWED_IN_CURRENT_DISPUTE_STATE")) {
@@ -111,12 +124,13 @@ export async function POST(
         }
       }
       
+      console.log("Returning PayPal error response:", { statusCode, userFriendlyMessage })
       return NextResponse.json(
         {
           error: "Failed to send message",
           message: userFriendlyMessage,
-          paypalError: error.details?.name || error.name,
-          paypalDetails: error.details?.details,
+          paypalError: errorDetails?.name || error.name,
+          paypalDetails: errorDetails?.details,
         },
         { status: statusCode }
       )
