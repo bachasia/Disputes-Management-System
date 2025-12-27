@@ -405,13 +405,20 @@ export class PayPalDisputesAPI {
     console.log("[PayPal] Input JSON string length:", inputJson.length)
     console.log("[PayPal] Input JSON preview:", inputJson.substring(0, 200))
 
-    parts.push(Buffer.from(
+    // Add input JSON part with proper encoding
+    // PayPal API requires charset=utf-8 for JSON in multipart
+    const inputPartHeader = Buffer.from(
       `--${boundary}\r\n` +
       `Content-Disposition: form-data; name="input"\r\n` +
-      `Content-Type: application/json\r\n\r\n` +
-      inputJson +
-      `\r\n`
-    ))
+      `Content-Type: application/json; charset=utf-8\r\n\r\n`,
+      'utf-8'
+    )
+    const inputPartBody = Buffer.from(inputJson, 'utf-8')
+    const inputPartFooter = Buffer.from('\r\n', 'utf-8')
+    
+    parts.push(inputPartHeader)
+    parts.push(inputPartBody)
+    parts.push(inputPartFooter)
 
     // Add ALL file parts in the SAME request
     // Filename MUST match documents[].name in the input JSON
@@ -431,6 +438,19 @@ export class PayPalDisputesAPI {
     const body = Buffer.concat(parts)
 
     console.log(`[PayPal] Uploading ${files.length} files to provide-evidence API`)
+    console.log(`[PayPal] Multipart body size: ${body.length} bytes`)
+    
+    // Log first 500 bytes of multipart body to verify format
+    const bodyPreview = body.toString('utf-8', 0, Math.min(500, body.length))
+    console.log(`[PayPal] Multipart body preview (first 500 bytes):`, bodyPreview)
+    
+    // Verify JSON is in the body
+    const bodyString = body.toString('utf-8')
+    if (bodyString.includes('"evidence_type"')) {
+      console.log(`[PayPal] ✓ evidence_type found in multipart body`)
+    } else {
+      console.error(`[PayPal] ✗ evidence_type NOT found in multipart body!`)
+    }
 
     const response = await fetch(
       `${baseURL}/v1/customer/disputes/${disputeId}/provide-evidence`,
