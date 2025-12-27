@@ -345,13 +345,28 @@ export class PayPalDisputesAPI {
     const boundary = `----FormBoundary${Date.now()}`
     const parts: Buffer[] = []
 
+    // Validate that all evidence items have evidence_type
+    if (evidence.length > 0) {
+      for (const item of evidence) {
+        if (!item.evidence_type) {
+          throw new Error(`Evidence item missing required field: evidence_type. Item: ${JSON.stringify(item)}`)
+        }
+      }
+    }
+
     // IMPORTANT: Add documents array to evidence with filenames matching multipart parts
     // Each evidence item should reference the uploaded files
     const evidenceWithDocs = evidence.map((item, index) => {
+      // Ensure evidence_type is preserved
+      if (!item.evidence_type) {
+        throw new Error(`Evidence item at index ${index} is missing evidence_type`)
+      }
+      
       // If this is the first evidence item, attach all documents to it
       if (index === 0 && files.length > 0) {
         return {
-          ...item,
+          evidence_type: item.evidence_type, // Explicitly preserve evidence_type
+          ...(item.evidence_info && { evidence_info: item.evidence_info }),
           documents: files.map(f => ({ name: f.filename })),
         }
       }
@@ -368,6 +383,13 @@ export class PayPalDisputesAPI {
           }]
         : []
 
+    // Validate final evidence before sending
+    for (const item of finalEvidence) {
+      if (!item.evidence_type) {
+        throw new Error(`Final evidence item missing evidence_type: ${JSON.stringify(item)}`)
+      }
+    }
+
     // Add input JSON part
     const inputData: ProvideEvidenceRequest = { evidence: finalEvidence }
     if (note) {
@@ -375,12 +397,20 @@ export class PayPalDisputesAPI {
     }
 
     console.log("[PayPal] Provide evidence input:", JSON.stringify(inputData, null, 2))
+    console.log("[PayPal] Evidence items count:", finalEvidence.length)
+    console.log("[PayPal] Each evidence item has evidence_type:", finalEvidence.every(item => item.evidence_type))
+    
+    // Serialize JSON compactly (no spaces) to avoid parsing issues
+    const inputJson = JSON.stringify(inputData)
+    console.log("[PayPal] Input JSON string length:", inputJson.length)
+    console.log("[PayPal] Input JSON preview:", inputJson.substring(0, 200))
 
     parts.push(Buffer.from(
       `--${boundary}\r\n` +
       `Content-Disposition: form-data; name="input"\r\n` +
       `Content-Type: application/json\r\n\r\n` +
-      `${JSON.stringify(inputData)}\r\n`
+      inputJson +
+      `\r\n`
     ))
 
     // Add ALL file parts in the SAME request

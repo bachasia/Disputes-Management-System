@@ -95,6 +95,33 @@ export async function POST(
       note = body.note
     }
 
+    // Validate evidence before sending
+    if (evidence.length === 0) {
+      return NextResponse.json(
+        {
+          error: "Bad Request",
+          message: "At least one evidence item is required",
+        },
+        { status: 400 }
+      )
+    }
+
+    // Validate that all evidence items have evidence_type
+    for (const item of evidence) {
+      if (!item.evidence_type) {
+        console.error("Evidence item missing evidence_type:", item)
+        return NextResponse.json(
+          {
+            error: "Bad Request",
+            message: "All evidence items must have an evidence_type field",
+          },
+          { status: 400 }
+        )
+      }
+    }
+
+    console.log("[ProvideEvidence] Validated evidence:", JSON.stringify(evidence, null, 2))
+
     // Provide evidence via PayPal API
     if (files.length > 0) {
       // Use multipart upload with files
@@ -129,8 +156,42 @@ export async function POST(
     })
 
     return NextResponse.json({ success: true }, { status: 200 })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error providing evidence:", error)
+    console.error("Error details:", JSON.stringify(error?.details || error, null, 2))
+    
+    // Handle PayPal API errors with detailed messages
+    if (error?.name === "PayPalAPIError" || error?.statusCode || error?.details) {
+      const statusCode = error.statusCode || 400
+      let errorMessage = error.message || "Failed to provide evidence"
+      let userFriendlyMessage = errorMessage
+      
+      // Extract specific error details from PayPal API response
+      const errorDetails = error.details || {}
+      if (errorDetails.details && Array.isArray(errorDetails.details)) {
+        const issues = errorDetails.details.map((d: any) => d.issue).filter(Boolean)
+        console.log("PayPal error issues:", issues)
+        
+        // Map PayPal error codes to user-friendly messages
+        if (issues.includes("MISSING_EVIDENCE_TYPE")) {
+          userFriendlyMessage = "Missing evidence type: All evidence items must have an evidence_type field. Please check your evidence data."
+        } else if (issues.length > 0) {
+          userFriendlyMessage = `PayPal API Error: ${issues.join(", ")}`
+        }
+      }
+      
+      return NextResponse.json(
+        {
+          error: "Failed to provide evidence",
+          message: userFriendlyMessage,
+          paypalError: errorDetails?.name || error.name,
+          paypalDetails: errorDetails?.details,
+        },
+        { status: statusCode }
+      )
+    }
+    
+    // Handle other errors
     return NextResponse.json(
       {
         error: "Failed to provide evidence",
