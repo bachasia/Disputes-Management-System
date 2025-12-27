@@ -354,59 +354,60 @@ export class PayPalDisputesAPI {
       }
     }
 
-    // IMPORTANT: Add documents array to evidence with filenames matching multipart parts
-    // Each evidence item should reference the uploaded files
-    const evidenceWithDocs = evidence.map((item, index) => {
-      // Ensure evidence_type is preserved
-      if (!item.evidence_type) {
-        throw new Error(`Evidence item at index ${index} is missing evidence_type`)
-      }
+    // CRITICAL FIX: PayPal API requires evidence_type as a separate form field,
+    // NOT inside the JSON input when uploading files
+    // Extract evidence_type from first evidence item (PayPal only supports one evidence_type per request)
+    let evidenceType: string | undefined
+    if (evidence.length > 0 && evidence[0].evidence_type) {
+      evidenceType = evidence[0].evidence_type
+    } else if (files.length > 0) {
+      evidenceType = "OTHER" // Default if no evidence type provided
+    }
+
+    if (!evidenceType) {
+      throw new Error("evidence_type is required when providing evidence with files")
+    }
+
+    // Build input JSON WITHOUT evidence_type (PayPal requirement)
+    // Only include evidence_info and documents in JSON input
+    const evidenceForInput = evidence.map((item, index) => {
+      const { evidence_type, ...rest } = item // Remove evidence_type from JSON
       
       // If this is the first evidence item, attach all documents to it
       if (index === 0 && files.length > 0) {
         return {
-          evidence_type: item.evidence_type, // Explicitly preserve evidence_type
-          ...(item.evidence_info && { evidence_info: item.evidence_info }),
+          ...(rest.evidence_info && { evidence_info: rest.evidence_info }),
           documents: files.map(f => ({ name: f.filename })),
         }
       }
-      return item
+      // For other items, just remove evidence_type
+      return rest
     })
 
-    // If no evidence items but we have files, create one with documents
-    const finalEvidence = evidenceWithDocs.length > 0 
-      ? evidenceWithDocs 
+    // If no evidence items but we have files, create one with just documents
+    const finalEvidence = evidenceForInput.length > 0 
+      ? evidenceForInput 
       : files.length > 0 
         ? [{ 
-            evidence_type: "OTHER",
             documents: files.map(f => ({ name: f.filename })),
           }]
         : []
 
-    // Validate final evidence before sending
-    for (const item of finalEvidence) {
-      if (!item.evidence_type) {
-        throw new Error(`Final evidence item missing evidence_type: ${JSON.stringify(item)}`)
-      }
-    }
-
-    // Add input JSON part
-    const inputData: ProvideEvidenceRequest = { evidence: finalEvidence }
+    // Build input JSON (without evidence_type)
+    const inputData: any = { evidence: finalEvidence }
     if (note) {
       inputData.note = note
     }
 
-    console.log("[PayPal] Provide evidence input:", JSON.stringify(inputData, null, 2))
-    console.log("[PayPal] Evidence items count:", finalEvidence.length)
-    console.log("[PayPal] Each evidence item has evidence_type:", finalEvidence.every(item => item.evidence_type))
+    console.log("[PayPal] Evidence type (separate field):", evidenceType)
+    console.log("[PayPal] Provide evidence input (without evidence_type):", JSON.stringify(inputData, null, 2))
     
     // Serialize JSON compactly (no spaces) to avoid parsing issues
     const inputJson = JSON.stringify(inputData)
     console.log("[PayPal] Input JSON string length:", inputJson.length)
     console.log("[PayPal] Input JSON preview:", inputJson.substring(0, 200))
 
-    // Add input JSON part with proper encoding
-    // PayPal API requires charset=utf-8 for JSON in multipart
+    // Add input JSON part (without evidence_type)
     const inputPartHeader = Buffer.from(
       `--${boundary}\r\n` +
       `Content-Disposition: form-data; name="input"\r\n` +
@@ -419,6 +420,16 @@ export class PayPalDisputesAPI {
     parts.push(inputPartHeader)
     parts.push(inputPartBody)
     parts.push(inputPartFooter)
+
+    // CRITICAL: Add evidence_type as a separate form field (PayPal requirement)
+    const evidenceTypePart = Buffer.from(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="evidence_type"\r\n\r\n` +
+      `${evidenceType}\r\n`,
+      'utf-8'
+    )
+    parts.push(evidenceTypePart)
+    console.log(`[PayPal] Added evidence_type as separate form field: ${evidenceType}`)
 
     // Add ALL file parts in the SAME request
     // Filename MUST match documents[].name in the input JSON
@@ -444,12 +455,19 @@ export class PayPalDisputesAPI {
     const bodyPreview = body.toString('utf-8', 0, Math.min(500, body.length))
     console.log(`[PayPal] Multipart body preview (first 500 bytes):`, bodyPreview)
     
-    // Verify JSON is in the body
+    // Verify evidence_type is in the body as a form field (not in JSON)
     const bodyString = body.toString('utf-8')
-    if (bodyString.includes('"evidence_type"')) {
-      console.log(`[PayPal] ✓ evidence_type found in multipart body`)
+    if (bodyString.includes(`name="evidence_type"`)) {
+      console.log(`[PayPal] ✓ evidence_type found as separate form field in multipart body`)
     } else {
-      console.error(`[PayPal] ✗ evidence_type NOT found in multipart body!`)
+      console.error(`[PayPal] ✗ evidence_type NOT found as form field in multipart body!`)
+    }
+    
+    // Verify evidence_type is NOT in JSON input (should be removed)
+    if (bodyString.includes('"evidence_type"')) {
+      console.warn(`[PayPal] ⚠ evidence_type still found in JSON input - this may cause issues`)
+    } else {
+      console.log(`[PayPal] ✓ evidence_type correctly removed from JSON input`)
     }
 
     const response = await fetch(
