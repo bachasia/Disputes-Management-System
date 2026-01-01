@@ -204,12 +204,32 @@ export function ProvideEvidenceModal({
     }
   }
 
+  // Sanitize file names to remove special characters that PayPal may reject
+  const sanitizeFileName = (filename: string): string => {
+    return filename
+      .replace(/#/g, '-')  // Replace # with -
+      .replace(/[<>:"|?*\\\/]/g, '_')  // Replace invalid chars with _
+      .trim()
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
     try {
+      // Validate: PROOF_OF_FULFILLMENT with files requires tracking info
+      if (files.length > 0 && evidenceType === "PROOF_OF_FULFILLMENT") {
+        if (!trackingNumber && !carrier) {
+          setError(
+            "Tracking information (carrier and tracking number) is required when providing fulfillment evidence with files. " +
+            "Please either add tracking information or change evidence type to 'Any other information'."
+          )
+          setLoading(false)
+          return
+        }
+      }
+
       // Step 1: If fulfillment info with tracking, call Add Tracking API first
       if (
         evidenceType === "PROOF_OF_FULFILLMENT" &&
@@ -280,17 +300,21 @@ export function ProvideEvidenceModal({
           evidenceItem.evidence_info = evidenceInfo
         }
 
-        // Add documents reference for uploaded files
-        evidenceItem.documents = files.map(f => ({ name: f.name }))
+        // Add documents reference for uploaded files (with sanitized names)
+        evidenceItem.documents = files.map(f => ({ name: sanitizeFileName(f.name) }))
 
         evidence.push(evidenceItem)
 
         // Add to FormData (NO top-level note - PayPal doesn't process it with files)
         formData.append("input", JSON.stringify({ evidence }))
 
-        // Add files
+        // Add files with sanitized names
         files.forEach((file) => {
-          formData.append("evidence_file", file)
+          // Create new File with sanitized name
+          const sanitizedFile = new File([file], sanitizeFileName(file.name), {
+            type: file.type
+          })
+          formData.append("evidence_file", sanitizedFile)
         })
 
         const response = await fetch(`/api/disputes/${disputeId}/provide-evidence`, {
@@ -530,8 +554,8 @@ export function ProvideEvidenceModal({
               <Label>Upload Evidence Files</Label>
               <div
                 className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${isDragging
-                    ? "border-primary bg-primary/5"
-                    : "border-muted-foreground/25 hover:border-primary/50"
+                  ? "border-primary bg-primary/5"
+                  : "border-muted-foreground/25 hover:border-primary/50"
                   } ${loading ? "opacity-50 pointer-events-none" : ""}`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
