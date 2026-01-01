@@ -116,10 +116,10 @@ export interface ListDisputesParams {
 }
 
 // Accept claim reason types
-export type AcceptClaimReason = 
-  | "POLICY" 
-  | "DID_NOT_SHIP" 
-  | "TOO_TIME_CONSUMING" 
+export type AcceptClaimReason =
+  | "POLICY"
+  | "DID_NOT_SHIP"
+  | "TOO_TIME_CONSUMING"
   | "CANNOT_PROVIDE_EVIDENCE"
 
 // Display names for accept claim reasons
@@ -170,7 +170,7 @@ export interface EvidenceItem {
 }
 
 export interface ProvideEvidenceRequest {
-  evidence: EvidenceItem[]
+  evidences: EvidenceItem[]
   note?: string
 }
 
@@ -216,7 +216,7 @@ export interface SendMessageResponse {
  * PayPal Disputes API Client
  */
 export class PayPalDisputesAPI {
-  constructor(private client: PayPalClient) {}
+  constructor(private client: PayPalClient) { }
 
   /**
    * List disputes
@@ -273,7 +273,7 @@ export class PayPalDisputesAPI {
     }
   ): Promise<AcceptClaimResponse> {
     const body: AcceptClaimRequest = {}
-    
+
     if (options?.note) {
       body.note = options.note
     }
@@ -307,7 +307,7 @@ export class PayPalDisputesAPI {
     note?: string
   ): Promise<ProvideEvidenceResponse> {
     const body: ProvideEvidenceRequest = {
-      evidence,
+      evidences: evidence,
     }
     if (note) {
       body.note = note
@@ -372,7 +372,7 @@ export class PayPalDisputesAPI {
     // Only include evidence_info and documents in JSON input
     const evidenceForInput = evidence.map((item, index) => {
       const { evidence_type, ...rest } = item // Remove evidence_type from JSON
-      
+
       // If this is the first evidence item, attach all documents to it
       if (index === 0 && files.length > 0) {
         return {
@@ -385,23 +385,23 @@ export class PayPalDisputesAPI {
     })
 
     // If no evidence items but we have files, create one with just documents
-    const finalEvidence = evidenceForInput.length > 0 
-      ? evidenceForInput 
-      : files.length > 0 
-        ? [{ 
-            documents: files.map(f => ({ name: f.filename })),
-          }]
+    const finalEvidence = evidenceForInput.length > 0
+      ? evidenceForInput
+      : files.length > 0
+        ? [{
+          documents: files.map(f => ({ name: f.filename })),
+        }]
         : []
 
     // Build input JSON (without evidence_type)
-    const inputData: any = { evidence: finalEvidence }
+    const inputData: any = { evidences: finalEvidence }
     if (note) {
       inputData.note = note
     }
 
     console.log("[PayPal] Evidence type (separate field):", evidenceType)
     console.log("[PayPal] Provide evidence input (without evidence_type):", JSON.stringify(inputData, null, 2))
-    
+
     // Serialize JSON compactly (no spaces) to avoid parsing issues
     const inputJson = JSON.stringify(inputData)
     console.log("[PayPal] Input JSON string length:", inputJson.length)
@@ -416,7 +416,7 @@ export class PayPalDisputesAPI {
     )
     const inputPartBody = Buffer.from(inputJson, 'utf-8')
     const inputPartFooter = Buffer.from('\r\n', 'utf-8')
-    
+
     parts.push(inputPartHeader)
     parts.push(inputPartBody)
     parts.push(inputPartFooter)
@@ -450,11 +450,11 @@ export class PayPalDisputesAPI {
 
     console.log(`[PayPal] Uploading ${files.length} files to provide-evidence API`)
     console.log(`[PayPal] Multipart body size: ${body.length} bytes`)
-    
+
     // Log first 500 bytes of multipart body to verify format
     const bodyPreview = body.toString('utf-8', 0, Math.min(500, body.length))
     console.log(`[PayPal] Multipart body preview (first 500 bytes):`, bodyPreview)
-    
+
     // Verify evidence_type is in the body as a form field (not in JSON)
     const bodyString = body.toString('utf-8')
     if (bodyString.includes(`name="evidence_type"`)) {
@@ -462,7 +462,7 @@ export class PayPalDisputesAPI {
     } else {
       console.error(`[PayPal] ✗ evidence_type NOT found as form field in multipart body!`)
     }
-    
+
     // Verify evidence_type is NOT in JSON input (should be removed)
     if (bodyString.includes('"evidence_type"')) {
       console.warn(`[PayPal] ⚠ evidence_type still found in JSON input - this may cause issues`)
