@@ -248,39 +248,37 @@ export function ProvideEvidenceModal({
         // Add evidence info
         const evidence: any[] = []
         
+        // Build evidence item based on type
+        let evidenceItem: any = {
+          evidence_type: evidenceType,
+          evidence_info: {},
+        }
+        
+        // Add type-specific info
         if (evidenceType === "PROOF_OF_FULFILLMENT" && (trackingNumber || carrier)) {
-          evidence.push({
-            evidence_type: "PROOF_OF_FULFILLMENT",
-            evidence_info: {
-              tracking_info: [
-                {
-                  carrier_name: carrier === "OTHER" ? carrierOther : carrier || undefined,
-                  tracking_number: trackingNumber || undefined,
-                },
-              ],
+          evidenceItem.evidence_info.tracking_info = [
+            {
+              carrier_name: carrier === "OTHER" ? carrierOther : carrier || undefined,
+              tracking_number: trackingNumber || undefined,
             },
-          })
+          ]
         } else if (evidenceType === "PROOF_OF_REFUND" && refundId) {
-          evidence.push({
-            evidence_type: "PROOF_OF_REFUND",
-            evidence_info: {
-              refund_ids: [refundId],
-            },
-          })
+          evidenceItem.evidence_info.refund_ids = [refundId]
         }
         
-        // Always add evidence type for files
-        if (evidence.length === 0) {
-          evidence.push({
-            evidence_type: evidenceType,
-            evidence_info: note ? { notes: note } : {},
-          })
+        // CRITICAL FIX: Always add notes to evidence_info if present
+        // PayPal API requires notes in evidence_info.notes, not at top level
+        if (note) {
+          evidenceItem.evidence_info.notes = note
         }
         
-        formData.append("input", JSON.stringify({
-          evidence,
-          note: note || undefined,
-        }))
+        // Add documents reference for uploaded files
+        evidenceItem.documents = files.map(f => ({ name: f.name }))
+        
+        evidence.push(evidenceItem)
+        
+        // Add to FormData (NO top-level note - PayPal doesn't process it with files)
+        formData.append("input", JSON.stringify({ evidence }))
         
         // Add files
         files.forEach((file) => {
