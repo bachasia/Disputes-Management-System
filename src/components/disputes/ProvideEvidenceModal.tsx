@@ -47,6 +47,10 @@ const ALLOWED_EXTENSIONS = ".jpg,.jpeg,.gif,.png,.pdf,.txt"
 // Note character limit
 const MAX_NOTE_LENGTH = 2000
 
+// Batch upload constants
+const MAX_FILES_PER_BATCH = 3  // Conservative limit to avoid PayPal API issues
+const BATCH_DELAY_MS = 1000  // Delay between batches to avoid rate limiting
+
 interface ProvideEvidenceModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -74,6 +78,10 @@ export function ProvideEvidenceModal({
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [isDragging, setIsDragging] = React.useState(false)
+  const [uploadProgress, setUploadProgress] = React.useState<{
+    current: number
+    total: number
+  } | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const resetForm = () => {
@@ -212,6 +220,87 @@ export function ProvideEvidenceModal({
       .trim()
   }
 
+  // Helper: Split files into batches
+  const splitIntoBatches = (files: File[], batchSize: number): File[][] => {
+    const batches: File[][] = []
+    for (let i = 0; i < files.length; i += batchSize) {
+      batches.push(files.slice(i, i + batchSize))
+    }
+    return batches
+  }
+
+  // Helper: Submit a single batch of evidence
+  const submitEvidenceBatch = async (
+    batch: File[],
+    isFirstBatch: boolean,
+    batchNumber: number,
+    totalBatches: number
+  ): Promise<void> => {
+    const formData = new FormData()
+
+    // Build evidence item
+    let evidenceItem: any = {
+      evidence_type: isFirstBatch ? evidenceType : "OTHER",
+    }
+
+    // Build evidence_info
+    const evidenceInfo: any = {}
+
+    // First batch: Include full tracking info and notes
+    if (isFirstBatch) {
+      if (evidenceType === "PROOF_OF_FULFILLMENT" && (trackingNumber || carrier)) {
+        evidenceInfo.tracking_info = [
+          {
+            carrier_name: carrier === "OTHER" ? carrierOther : carrier || undefined,
+            tracking_number: trackingNumber || undefined,
+          },
+        ]
+      } else if (evidenceType === "PROOF_OF_REFUND" && refundId) {
+        evidenceInfo.refund_ids = [refundId]
+      }
+
+      if (note) {
+        const batchSuffix = totalBatches > 1 ? ` (Batch ${batchNumber} of ${totalBatches})` : ""
+        evidenceInfo.notes = note + batchSuffix
+      }
+    } else {
+      // Subsequent batches: Reference to first batch
+      evidenceInfo.notes = `Additional evidence files (Batch ${batchNumber} of ${totalBatches}) - see previous submission for details`
+    }
+
+    // Only include evidence_info if it has data
+    if (Object.keys(evidenceInfo).length > 0) {
+      evidenceItem.evidence_info = evidenceInfo
+    }
+
+    // Add documents reference
+    evidenceItem.documents = batch.map(f => ({ name: sanitizeFileName(f.name) }))
+
+    const evidence = [evidenceItem]
+
+    // Add to FormData
+    formData.append("input", JSON.stringify({ evidence }))
+
+    // Add files with sanitized names
+    batch.forEach((file) => {
+      const sanitizedFile = new File([file], sanitizeFileName(file.name), {
+        type: file.type
+      })
+      formData.append("evidence_file", sanitizedFile)
+    })
+
+    // Submit to API
+    const response = await fetch(`/api/disputes/${disputeId}/provide-evidence`, {
+      method: "POST",
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.message || `Failed to upload batch ${batchNumber}`)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -263,118 +352,101 @@ export function ProvideEvidenceModal({
       // Step 2: Call Provide Evidence API
       // Use FormData if files are present
       if (files.length > 0) {
-        const formData = new FormData()
+        // Check if we need to split into batches
+        if (files.length > MAX_FILES_PER_BATCH) {
+          // Multiple batches
+          const batches = splitIntoBatches(files, MAX_FILES_PER_BATCH)
+          setUploadProgress({ current: 0, total: batches.length })
 
-        // Add evidence info
-        const evidence: any[] = []
+          for (let i = 0; i < batches.length; i++) {
+            setUploadProgress({ current: i + 1, total: batches.length })
+            setError(`Uploading batch ${i + 1} of ${batches.length}...`)
 
-        // Build evidence item based on type
-        let evidenceItem: any = {
-          evidence_type: evidenceType,
-        }
+            await submitEvidenceBatch(
+              batches[i],
+              i === 0,  // isFirstBatch
+              i + 1,    // batchNumber
+              batches.length  // totalBatches
+            )
 
-        // Build evidence_info object (only if has data)
-        const evidenceInfo: any = {}
+            // Delay between batches to avoid rate limiting
+            if (i < batches.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS))
+            }
+          }
 
-        // Add type-specific info
-        if (evidenceType === "PROOF_OF_FULFILLMENT" && (trackingNumber || carrier)) {
-          evidenceInfo.tracking_info = [
-            {
-              carrier_name: carrier === "OTHER" ? carrierOther : carrier || undefined,
-              tracking_number: trackingNumber || undefined,
-            },
-          ]
-        } else if (evidenceType === "PROOF_OF_REFUND" && refundId) {
-          evidenceInfo.refund_ids = [refundId]
-        }
+          setUploadProgress(null)
+        } else {
+          // Single batch - use existing logic
+          const formData = new FormData()
 
-        // CRITICAL FIX: Always add notes to evidence_info if present
-        // PayPal API requires notes in evidence_info.notes, not at top level
-        if (note) {
-          evidenceInfo.notes = note
-        }
+          // Add evidence info
+          const evidence: any[] = []
 
-        // Only include evidence_info if it has actual data
-        // PayPal rejects empty evidence_info: {} with INVALID_EVIDENCE_FILE
-        if (Object.keys(evidenceInfo).length > 0) {
-          evidenceItem.evidence_info = evidenceInfo
-        }
+          // Build evidence item based on type
+          let evidenceItem: any = {
+            evidence_type: evidenceType,
+          }
 
-        // Add documents reference for uploaded files (with sanitized names)
-        evidenceItem.documents = files.map(f => ({ name: sanitizeFileName(f.name) }))
+          // Build evidence_info object (only if has data)
+          const evidenceInfo: any = {}
 
-        evidence.push(evidenceItem)
+          // Add type-specific info
+          if (evidenceType === "PROOF_OF_FULFILLMENT" && (trackingNumber || carrier)) {
+            evidenceInfo.tracking_info = [
+              {
+                carrier_name: carrier === "OTHER" ? carrierOther : carrier || undefined,
+                tracking_number: trackingNumber || undefined,
+              },
+            ]
+          } else if (evidenceType === "PROOF_OF_REFUND" && refundId) {
+            evidenceInfo.refund_ids = [refundId]
+          }
 
-        // Add to FormData (NO top-level note - PayPal doesn't process it with files)
-        formData.append("input", JSON.stringify({ evidence }))
+          // CRITICAL FIX: Always add notes to evidence_info if present
+          // PayPal API requires notes in evidence_info.notes, not at top level
+          if (note) {
+            evidenceInfo.notes = note
+          }
 
-        // Add files with sanitized names
-        files.forEach((file) => {
-          // Create new File with sanitized name
-          const sanitizedFile = new File([file], sanitizeFileName(file.name), {
-            type: file.type
+          // Only include evidence_info if it has actual data
+          // PayPal rejects empty evidence_info: {} with INVALID_EVIDENCE_FILE
+          if (Object.keys(evidenceInfo).length > 0) {
+            evidenceItem.evidence_info = evidenceInfo
+          }
+
+          // Add documents reference for uploaded files (with sanitized names)
+          evidenceItem.documents = files.map(f => ({ name: sanitizeFileName(f.name) }))
+
+          evidence.push(evidenceItem)
+
+          // Add to FormData (NO top-level note - PayPal doesn't process it with files)
+          formData.append("input", JSON.stringify({ evidence }))
+
+          // Add files with sanitized names
+          files.forEach((file) => {
+            // Create new File with sanitized name
+            const sanitizedFile = new File([file], sanitizeFileName(file.name), {
+              type: file.type
+            })
+            formData.append("evidence_file", sanitizedFile)
           })
-          formData.append("evidence_file", sanitizedFile)
-        })
 
-        const response = await fetch(`/api/disputes/${disputeId}/provide-evidence`, {
-          method: "POST",
-          body: formData,
-        })
+          const response = await fetch(`/api/disputes/${disputeId}/provide-evidence`, {
+            method: "POST",
+            body: formData,
+          })
 
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.message || "Failed to provide evidence")
+          if (!response.ok) {
+            const errorData = await response.json()
+            throw new Error(errorData.message || "Failed to provide evidence")
+          }
         }
       } else {
-        // No files - use JSON
-        const evidence: any[] = []
-
-        if (evidenceType === "PROOF_OF_FULFILLMENT") {
-          if (trackingNumber || carrier) {
-            evidence.push({
-              evidence_type: "PROOF_OF_FULFILLMENT",
-              evidence_info: {
-                tracking_info: [
-                  {
-                    carrier_name: carrier === "OTHER" ? carrierOther : carrier || undefined,
-                    tracking_number: trackingNumber || undefined,
-                  },
-                ],
-              },
-            })
-          }
-        } else if (evidenceType === "PROOF_OF_REFUND") {
-          if (refundId) {
-            evidence.push({
-              evidence_type: "PROOF_OF_REFUND",
-              evidence_info: {
-                refund_ids: [refundId],
-              },
-            })
-          }
-        } else {
-          if (note) {
-            evidence.push({
-              evidence_type: "OTHER",
-              evidence_info: {
-                notes: note,
-              },
-            })
-          }
-        }
-
-        if (evidence.length === 0 && note) {
-          evidence.push({
-            evidence_type: evidenceType,
-            evidence_info: {
-              notes: note,
-            },
-          })
-        }
-
-        if (evidence.length === 0) {
-          setError("Please provide at least one piece of evidence")
+        // No files - use simplified JSON with just note
+        // PayPal API for JSON-only requests appears to not accept evidence array structure
+        if (!note) {
+          setError("Please provide a message when submitting without files")
           setLoading(false)
           return
         }
@@ -385,8 +457,7 @@ export function ProvideEvidenceModal({
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            evidence,
-            note: note || undefined,
+            note: note,
           }),
         })
 
