@@ -99,39 +99,39 @@ export function ProvideEvidenceModal({
   const validateFiles = (newFiles: File[]): { valid: File[]; errors: string[] } => {
     const errors: string[] = []
     const valid: File[] = []
-    
+
     const currentTotalSize = files.reduce((sum, f) => sum + f.size, 0)
     let newTotalSize = currentTotalSize
-    
+
     for (const file of newFiles) {
       // Check file count
       if (files.length + valid.length >= MAX_FILES) {
         errors.push(`Maximum ${MAX_FILES} files allowed`)
         break
       }
-      
+
       // Check file type
       if (!ALLOWED_TYPES.includes(file.type)) {
         errors.push(`${file.name}: Invalid file type. Allowed: JPG, GIF, PNG, PDF, TXT`)
         continue
       }
-      
+
       // Check individual file size
       if (file.size > MAX_FILE_SIZE) {
         errors.push(`${file.name}: File too large. Maximum 10MB per file`)
         continue
       }
-      
+
       // Check total size
       if (newTotalSize + file.size > MAX_TOTAL_SIZE) {
         errors.push(`Total file size exceeds 50MB limit`)
         break
       }
-      
+
       newTotalSize += file.size
       valid.push(file)
     }
-    
+
     return { valid, errors }
   }
 
@@ -139,13 +139,13 @@ export function ProvideEvidenceModal({
     if (e.target.files) {
       const newFiles = Array.from(e.target.files)
       const { valid, errors } = validateFiles(newFiles)
-      
+
       if (errors.length > 0) {
         setError(errors.join(". "))
       } else {
         setError(null)
       }
-      
+
       if (valid.length > 0) {
         setFiles(prev => [...prev, ...valid])
       }
@@ -169,17 +169,17 @@ export function ProvideEvidenceModal({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
-    
+
     if (e.dataTransfer.files) {
       const newFiles = Array.from(e.dataTransfer.files)
       const { valid, errors } = validateFiles(newFiles)
-      
+
       if (errors.length > 0) {
         setError(errors.join(". "))
       } else {
         setError(null)
       }
-      
+
       if (valid.length > 0) {
         setFiles(prev => [...prev, ...valid])
       }
@@ -244,47 +244,55 @@ export function ProvideEvidenceModal({
       // Use FormData if files are present
       if (files.length > 0) {
         const formData = new FormData()
-        
+
         // Add evidence info
         const evidence: any[] = []
-        
+
         // Build evidence item based on type
         let evidenceItem: any = {
           evidence_type: evidenceType,
-          evidence_info: {},
         }
-        
+
+        // Build evidence_info object (only if has data)
+        const evidenceInfo: any = {}
+
         // Add type-specific info
         if (evidenceType === "PROOF_OF_FULFILLMENT" && (trackingNumber || carrier)) {
-          evidenceItem.evidence_info.tracking_info = [
+          evidenceInfo.tracking_info = [
             {
               carrier_name: carrier === "OTHER" ? carrierOther : carrier || undefined,
               tracking_number: trackingNumber || undefined,
             },
           ]
         } else if (evidenceType === "PROOF_OF_REFUND" && refundId) {
-          evidenceItem.evidence_info.refund_ids = [refundId]
+          evidenceInfo.refund_ids = [refundId]
         }
-        
+
         // CRITICAL FIX: Always add notes to evidence_info if present
         // PayPal API requires notes in evidence_info.notes, not at top level
         if (note) {
-          evidenceItem.evidence_info.notes = note
+          evidenceInfo.notes = note
         }
-        
+
+        // Only include evidence_info if it has actual data
+        // PayPal rejects empty evidence_info: {} with INVALID_EVIDENCE_FILE
+        if (Object.keys(evidenceInfo).length > 0) {
+          evidenceItem.evidence_info = evidenceInfo
+        }
+
         // Add documents reference for uploaded files
         evidenceItem.documents = files.map(f => ({ name: f.name }))
-        
+
         evidence.push(evidenceItem)
-        
+
         // Add to FormData (NO top-level note - PayPal doesn't process it with files)
         formData.append("input", JSON.stringify({ evidence }))
-        
+
         // Add files
         files.forEach((file) => {
           formData.append("evidence_file", file)
         })
-        
+
         const response = await fetch(`/api/disputes/${disputeId}/provide-evidence`, {
           method: "POST",
           body: formData,
@@ -376,7 +384,7 @@ export function ProvideEvidenceModal({
 
   // Get ordered carrier list
   const carrierList = Object.keys(CARRIER_CODES)
-  
+
   // Calculate total file size
   const totalFileSize = files.reduce((sum, f) => sum + f.size, 0)
 
@@ -521,11 +529,10 @@ export function ProvideEvidenceModal({
             <div className="space-y-2">
               <Label>Upload Evidence Files</Label>
               <div
-                className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
-                  isDragging 
-                    ? "border-primary bg-primary/5" 
+                className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${isDragging
+                    ? "border-primary bg-primary/5"
                     : "border-muted-foreground/25 hover:border-primary/50"
-                } ${loading ? "opacity-50 pointer-events-none" : ""}`}
+                  } ${loading ? "opacity-50 pointer-events-none" : ""}`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
@@ -548,7 +555,7 @@ export function ProvideEvidenceModal({
                   JPG GIF PNG PDF TXT | Maximum of {MAX_FILES} files up to 10 MB each, 50 MB in total
                 </p>
               </div>
-              
+
               {/* File List */}
               {files.length > 0 && (
                 <div className="space-y-2 mt-3">
