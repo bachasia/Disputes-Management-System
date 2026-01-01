@@ -170,7 +170,7 @@ export interface EvidenceItem {
 }
 
 export interface ProvideEvidenceRequest {
-  evidences: EvidenceItem[]
+  evidence: EvidenceItem[]
   note?: string
 }
 
@@ -307,7 +307,7 @@ export class PayPalDisputesAPI {
     note?: string
   ): Promise<ProvideEvidenceResponse> {
     const body: ProvideEvidenceRequest = {
-      evidences: evidence,
+      evidence,
     }
     if (note) {
       body.note = note
@@ -394,7 +394,7 @@ export class PayPalDisputesAPI {
         : []
 
     // Build input JSON (without evidence_type)
-    const inputData: any = { evidences: finalEvidence }
+    const inputData: any = { evidence: finalEvidence }
     if (note) {
       inputData.note = note
     }
