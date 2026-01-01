@@ -158,6 +158,7 @@ export class PayPalClient {
     console.log(`[PayPalClient] ${method} ${url}`, {
       hasParams: !!data,
       params: method === "GET" ? data : undefined,
+      bodyPreview: method !== "GET" && data ? JSON.stringify(data).substring(0, 200) : undefined,
     })
 
     try {
@@ -174,12 +175,12 @@ export class PayPalClient {
           params: error.config?.params,
           fullUrl: `${this.baseURL}${error.config?.url}`,
         })
-        
+
         // Log detailed error information
         if (error.response.data?.details) {
           console.error(`[PayPalClient] Error details:`, error.response.data.details)
         }
-        
+
         throw new PayPalAPIError(
           error.response.data?.message || "PayPal API Error",
           error.response.status,
